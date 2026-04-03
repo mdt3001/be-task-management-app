@@ -119,7 +119,7 @@
   "scripts": {
     "build": "tsc && cp ./package.json ./dist",
     "start": "node dist/index.js",
-    "dev": "nodemon --watch 'src/**/*.ts' --exec 'ts-node' src/index.ts"
+    "dev": "nodemon --watch src/**/*.ts --exec ts-node src/index.ts"
   },
   "keywords": [],
   "author": "",
