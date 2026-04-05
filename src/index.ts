@@ -3,6 +3,12 @@ import express, { Request, Response, NextFunction } from "express";
 import cors from "cors";
 import session from "cookie-session";
 import { config } from "./config/app.config";
+import connectDB from "./config/database.config";
+import { errorHandler } from "./middlewares/errorHandler.middleware";
+import { HTTPSTATUS } from "./config/http.config";
+import { asyncHandler } from "./middlewares/asyncHandler.middleware";
+import { BadRequestException, UnauthorizedException } from "./utils/appError";
+import { ErrorCodeEnum } from "./enums/error-code.enum";
 
 const app = express();
 const BASE_PATH = config.BASE_PATH;
@@ -27,10 +33,13 @@ app.use(
     })
 );
 
-app.get('/', (req: Request, res: Response, next: NextFunction) => {
-    res.status(200).json({ message: "Welcome to the API" });
-});
+app.get('/', asyncHandler(async (req: Request, res: Response, next: NextFunction) => {
+    throw new BadRequestException("This is a bad request example", ErrorCodeEnum.VALIDATION_ERROR);
+}));
 
-app.listen(config.PORT, () => {
+app.use(errorHandler);
+
+app.listen(config.PORT, async() => {
     console.log(`Server is running on port ${config.PORT}`);
+    await connectDB();
 });
