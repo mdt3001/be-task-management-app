@@ -31,13 +31,12 @@ const userSchema = new Schema<UserDocument>(
     { timestamps: true }
 );  
 
-userSchema.pre("save", async function (next) {
+userSchema.pre("save", async function () {
     if (this.isModified("password")) {
         if (this.password) {
             this.password = await hashValue(this.password);
         }
     }
-    next();
 });
 
 userSchema.methods.omitPassword = function (): Omit<UserSchema, "password"> {
@@ -47,8 +46,10 @@ userSchema.methods.omitPassword = function (): Omit<UserSchema, "password"> {
 };
 
 userSchema.methods.comparePassword = async function (value: string): Promise<boolean> {
-    if (!this.password) return false;
-    return await compareValue(value, this.password);
+    if (typeof this.password !== "string") {
+        throw new Error("Password is not loaded on this document. Query with select(\"+password\") before calling comparePassword().");
+    }
+    return compareValue(value, this.password);
 };
 
 const UserModel = mongoose.model<UserDocument>("User", userSchema);
