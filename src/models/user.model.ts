@@ -39,19 +39,17 @@ userSchema.pre("save", async function () {
     }
 });
 
-type SafeUserDocument = Omit<UserDocument, "password">;
-
-userSchema.methods.omitPassword = function (): SafeUserDocument {
+userSchema.methods.omitPassword = function (): Omit<UserSchema, "password"> {
     const userObject = this.toObject();
     delete userObject.password;
-    return userObject as SafeUserDocument;
-}
+    return userObject;
+};
 
 userSchema.methods.comparePassword = async function (value: string): Promise<boolean> {
     if (typeof this.password !== "string") {
-        throw new Error('Password is not loaded on this document. Query with select("+password") before calling comparePassword().');
+        throw new Error("Password is not loaded on this document. Query with select(\"+password\") before calling comparePassword().");
     }
-    return await compareValue(value, this.password);
+    return compareValue(value, this.password);
 };
 
 const UserModel = mongoose.model<UserDocument>("User", userSchema);
