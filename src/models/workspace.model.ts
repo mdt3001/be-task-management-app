@@ -10,7 +10,9 @@ export interface Workspace {
     updatedAt: Date;
 };
 
-export interface WorkspaceDocument extends mongoose.Document, Workspace {}
+export interface WorkspaceDocument extends mongoose.Document, Workspace {
+    resetInviteCode(): void;
+}
 
 const workspaceSchema = new mongoose.Schema<WorkspaceDocument>(
     {
@@ -24,9 +26,11 @@ const workspaceSchema = new mongoose.Schema<WorkspaceDocument>(
     }
 );
 
-workspaceSchema.methods.resetInviteCode = function () {
+workspaceSchema.methods.resetInviteCode = function (
+    this: WorkspaceDocument
+) {
     this.inviteCode = generateInviteCode();
-}
+};
 
 const WorkspaceModel = mongoose.model<WorkspaceDocument>("Workspace", workspaceSchema);
 export default WorkspaceModel;

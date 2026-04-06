@@ -1,5 +1,5 @@
-import { v4 as uuidv4 } from 'uuid';
+import { randomBytes } from "crypto";
 
 export const generateInviteCode = () => {
-    return uuidv4().replace(/-/g, '').substring(0, 8);
+    return randomBytes(9).toString("base64url");
 };
