@@ -4,8 +4,10 @@ import { RoleDocument } from "./role.model";
 export interface Member {
     userId: mongoose.Types.ObjectId;
     workspaceId: mongoose.Types.ObjectId;
-    role: RoleDocument;
+    role: mongoose.Types.ObjectId | RoleDocument;
     joinedAt: Date;
+    createdAt: Date;
+    updatedAt: Date;
 };
 
 export interface MemberDocument extends Document, Member { };

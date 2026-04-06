@@ -8,11 +8,11 @@ export interface Task {
     description: string;
     project: mongoose.Types.ObjectId;
     workspace: mongoose.Types.ObjectId;
-    status: TaskStatusEnumType;
-    priority: TaskPriorityEnumType;
-    assignedTo: mongoose.Types.ObjectId;
+    status?: TaskStatusEnumType;
+    priority?: TaskPriorityEnumType;
+    assignedTo?: mongoose.Types.ObjectId;
     createdBy: mongoose.Types.ObjectId;
-    dueDate: Date;
+    dueDate?: Date;
     createdAt: Date;
     updatedAt: Date;
 };
@@ -21,7 +21,7 @@ export interface TaskDocument extends mongoose.Document, Task { };
 
 const taskSchema = new mongoose.Schema<TaskDocument>(
     {
-        taskCode: { type: String, required: true, default: generateTaskCode },
+        taskCode: { type: String, required: true, unique: true, index: true, default: generateTaskCode },
         title: { type: String, required: true, trim: true },
         description: { type: String, required: true, trim: true },
         project: { type: Schema.Types.ObjectId, ref: "Project", required: true },
