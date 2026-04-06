@@ -3,6 +3,6 @@ export const ProviderEnum = {
     GITHUB: "github",
     FACEBOOK: "facebook",
     EMAIL: "email",
-};
+} as const;
 
 export type ProviderType = typeof ProviderEnum[keyof typeof ProviderEnum];

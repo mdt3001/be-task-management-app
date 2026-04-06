@@ -7,28 +7,30 @@ export interface Account {
     userId: mongoose.Types.ObjectId;
     refreshToken: string | null;
     tokenExpiry: Date | null;
-    createdAt: Date;
 };
 
-const accountSchema = new mongoose.Schema<Account>(
+export interface AccountDocument extends mongoose.Document, Account {}
+
+const accountSchema = new mongoose.Schema<AccountDocument>(
     {
         provider: { type: String, required: true, enum: Object.values(ProviderEnum) },
-        providerId: { type: String, required: true, unique: true },
+        providerId: { type: String, required: true },
         userId: { type: mongoose.Schema.Types.ObjectId, ref: "User", required: true },
-        refreshToken: { type: String, default: null },
+        refreshToken: { type: String, default: null, select: false },
         tokenExpiry: { type: Date, default: null },
-        createdAt: { type: Date, default: Date.now },
     }, 
     {
         timestamps: true,
         toJSON: {
             transform: function (_doc, ret) {
-            const { refreshToken, ...safe } = ret;
-            return safe;
-    },
+                const { refreshToken, ...safe } = ret;
+                return safe;
+            },
         },
     }
 )
 
-const AccountModel = mongoose.model<Account>("Account", accountSchema);
+accountSchema.index({ provider: 1, providerId: 1 }, { unique: true });
+
+const AccountModel = mongoose.model<AccountDocument>("Account", accountSchema);
 export default AccountModel;
