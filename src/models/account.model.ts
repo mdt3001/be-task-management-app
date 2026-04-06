@@ -7,6 +7,8 @@ export interface Account {
     userId: mongoose.Types.ObjectId;
     refreshToken: string | null;
     tokenExpiry: Date | null;
+    createdAt: Date;
+    updatedAt: Date;
 };
 
 export interface AccountDocument extends mongoose.Document, Account {}
@@ -31,6 +33,7 @@ const accountSchema = new mongoose.Schema<AccountDocument>(
 )
 
 accountSchema.index({ provider: 1, providerId: 1 }, { unique: true });
+accountSchema.index({ userId: 1 });
 
 const AccountModel = mongoose.model<AccountDocument>("Account", accountSchema);
 export default AccountModel;
