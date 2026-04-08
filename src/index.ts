@@ -9,9 +9,19 @@ import { HTTPSTATUS } from "./config/http.config";
 import { asyncHandler } from "./middlewares/asyncHandler.middleware";
 import { BadRequestException, UnauthorizedException } from "./utils/appError";
 import { ErrorCodeEnum } from "./enums/error-code.enum";
+import swaggerUi, { setup } from "swagger-ui-express";
+import fs from "fs";
+import YAML from "yaml";
+import path from "path";
 
 const app = express();
 const BASE_PATH = config.BASE_PATH;
+
+// Load and parse the OpenAPI specification
+const filePath = path.join(__dirname, "docs", "openapi-skeleton.yaml");
+const file = fs.readFileSync(filePath, "utf8");
+const swaggerDocument = YAML.parse(file);
+app.use("/api-docs", swaggerUi.serve, swaggerUi.setup(swaggerDocument));
 
 app.use(express.json());
 
