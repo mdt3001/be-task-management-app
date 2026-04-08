@@ -1,10 +1,8 @@
 openapi: 3.0.3
 info:
-  title: Task Management API Skeleton
-  version: 0.1.0
-  description: |
-    OpenAPI skeleton for team implementation.
-    Prioritized by phases: P0 (critical), P1 (high), P2 (medium).
+  title: Task Management API
+  version: 1.0.0
+  description: OpenAPI skeleton generated from current models and enums.
 
 servers:
   - url: /api/v1
@@ -12,30 +10,47 @@ servers:
 
 tags:
   - name: Auth
+  - name: User
+  - name: Account
   - name: Workspace
   - name: Member
+  - name: Role
   - name: Project
   - name: Task
-  - name: Subtask
-  - name: Invitation
   - name: Comment
-  - name: Activity
-  - name: Notification
-  - name: Label
   - name: Attachment
-  - name: Internal
+  - name: Label
+  - name: Invitation
+  - name: Notification
+  - name: TaskActivity
 
 security:
   - bearerAuth: []
 
 paths:
-  # ========================
-  # P0 - Foundation / Auth
-  # ========================
+  /auth/register:
+    post:
+      tags: [Auth]
+      summary: Register with email/password
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RegisterRequest'
+      responses:
+        '201':
+          description: Registered
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthResponse'
+
   /auth/login:
     post:
       tags: [Auth]
-      summary: Login
+      summary: Login with email/password
       security: []
       requestBody:
         required: true
@@ -49,9 +64,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/AuthTokensResponse'
-        '401':
-          $ref: '#/components/responses/UnauthorizedError'
+                $ref: '#/components/schemas/AuthResponse'
 
   /auth/refresh:
     post:
@@ -66,13 +79,11 @@ paths:
               $ref: '#/components/schemas/RefreshTokenRequest'
       responses:
         '200':
-          description: Token refreshed
+          description: Refreshed
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/TokenRefreshResponse'
-        '401':
-          $ref: '#/components/responses/UnauthorizedError'
+                $ref: '#/components/schemas/TokenPair'
 
   /auth/logout:
     post:
@@ -92,25 +103,175 @@ paths:
               schema:
                 $ref: '#/components/schemas/SuccessResponse'
 
-  /workspaces/{workspaceId}/context:
+  /users/me:
+    get:
+      tags: [User]
+      summary: Get current user
+      responses:
+        '200':
+          description: User profile
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserResponse'
+    patch:
+      tags: [User]
+      summary: Update current user
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateMeRequest'
+      responses:
+        '200':
+          description: User updated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserResponse'
+
+  /users/me/current-workspace:
+    patch:
+      tags: [User]
+      summary: Switch current workspace
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SwitchWorkspaceRequest'
+      responses:
+        '200':
+          description: Switched
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserResponse'
+
+  /users/me/accounts:
+    get:
+      tags: [Account]
+      summary: List linked accounts
+      responses:
+        '200':
+          description: Accounts
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Account'
+
+  /roles:
+    get:
+      tags: [Role]
+      summary: List roles
+      responses:
+        '200':
+          description: Roles
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Role'
+
+  /workspaces:
+    post:
+      tags: [Workspace]
+      summary: Create workspace
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateWorkspaceRequest'
+      responses:
+        '201':
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WorkspaceResponse'
     get:
       tags: [Workspace]
-      summary: Get workspace context for current user
+      summary: List my workspaces
+      parameters:
+        - $ref: '#/components/parameters/Page'
+        - $ref: '#/components/parameters/Limit'
+      responses:
+        '200':
+          description: Workspaces
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedWorkspaceResponse'
+
+  /workspaces/{workspaceId}:
+    get:
+      tags: [Workspace]
+      summary: Get workspace detail
       parameters:
         - $ref: '#/components/parameters/WorkspaceId'
       responses:
         '200':
-          description: Context loaded
+          description: Workspace
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/WorkspaceContextResponse'
-        '403':
-          $ref: '#/components/responses/ForbiddenError'
+                $ref: '#/components/schemas/WorkspaceResponse'
+    patch:
+      tags: [Workspace]
+      summary: Update workspace
+      parameters:
+        - $ref: '#/components/parameters/WorkspaceId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateWorkspaceRequest'
+      responses:
+        '200':
+          description: Updated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WorkspaceResponse'
+    delete:
+      tags: [Workspace]
+      summary: Delete workspace
+      parameters:
+        - $ref: '#/components/parameters/WorkspaceId'
+      responses:
+        '200':
+          description: Deleted
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessResponse'
 
-  # ========================
-  # P0 - Member / RBAC
-  # ========================
+  /workspaces/{workspaceId}/reset-invite-code:
+    post:
+      tags: [Workspace]
+      summary: Reset invite code
+      parameters:
+        - $ref: '#/components/parameters/WorkspaceId'
+      responses:
+        '200':
+          description: Invite code reset
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WorkspaceResponse'
+
   /workspaces/{workspaceId}/members:
     get:
       tags: [Member]
@@ -121,33 +282,29 @@ paths:
         - $ref: '#/components/parameters/Limit'
       responses:
         '200':
-          description: Member list
+          description: Members
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/MemberListResponse'
+                $ref: '#/components/schemas/PaginatedMemberResponse'
 
   /workspaces/{workspaceId}/members/{memberId}:
     get:
       tags: [Member]
-      summary: Get member by id
+      summary: Get member detail
       parameters:
         - $ref: '#/components/parameters/WorkspaceId'
         - $ref: '#/components/parameters/MemberId'
       responses:
         '200':
-          description: Member detail
+          description: Member
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/MemberResponse'
-        '404':
-          $ref: '#/components/responses/NotFoundError'
-
-  /workspaces/{workspaceId}/members/{memberId}/role:
     patch:
       tags: [Member]
-      summary: Update member role
+      summary: Update member role/status
       parameters:
         - $ref: '#/components/parameters/WorkspaceId'
         - $ref: '#/components/parameters/MemberId'
@@ -156,41 +313,28 @@ paths:
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/UpdateMemberRoleRequest'
+              $ref: '#/components/schemas/UpdateMemberRequest'
       responses:
         '200':
-          description: Member updated
+          description: Updated
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/MemberResponse'
-        '403':
-          $ref: '#/components/responses/ForbiddenError'
-
-  /workspaces/{workspaceId}/members/{memberId}/status:
-    patch:
+    delete:
       tags: [Member]
-      summary: Update member status
+      summary: Remove member
       parameters:
         - $ref: '#/components/parameters/WorkspaceId'
         - $ref: '#/components/parameters/MemberId'
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/UpdateMemberStatusRequest'
       responses:
         '200':
-          description: Member updated
+          description: Removed
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/MemberResponse'
+                $ref: '#/components/schemas/SuccessResponse'
 
-  # ========================
-  # P0 - Project
-  # ========================
   /workspaces/{workspaceId}/projects:
     post:
       tags: [Project]
@@ -205,7 +349,7 @@ paths:
               $ref: '#/components/schemas/CreateProjectRequest'
       responses:
         '201':
-          description: Project created
+          description: Created
           content:
             application/json:
               schema:
@@ -219,41 +363,22 @@ paths:
         - $ref: '#/components/parameters/Limit'
       responses:
         '200':
-          description: Project list
+          description: Projects
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/ProjectListResponse'
-
-  /workspaces/{workspaceId}/projects/check-key:
-    get:
-      tags: [Project]
-      summary: Check project key availability
-      parameters:
-        - $ref: '#/components/parameters/WorkspaceId'
-        - name: key
-          in: query
-          required: true
-          schema:
-            type: string
-      responses:
-        '200':
-          description: Key check result
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ProjectKeyCheckResponse'
+                $ref: '#/components/schemas/PaginatedProjectResponse'
 
   /workspaces/{workspaceId}/projects/{projectId}:
     get:
       tags: [Project]
-      summary: Get project by id
+      summary: Get project detail
       parameters:
         - $ref: '#/components/parameters/WorkspaceId'
         - $ref: '#/components/parameters/ProjectId'
       responses:
         '200':
-          description: Project detail
+          description: Project
           content:
             application/json:
               schema:
@@ -272,7 +397,7 @@ paths:
               $ref: '#/components/schemas/UpdateProjectRequest'
       responses:
         '200':
-          description: Project updated
+          description: Updated
           content:
             application/json:
               schema:
@@ -285,47 +410,48 @@ paths:
         - $ref: '#/components/parameters/ProjectId'
       responses:
         '200':
-          description: Project deleted
+          description: Deleted
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/SuccessResponse'
 
   /workspaces/{workspaceId}/projects/{projectId}/archive:
-    patch:
+    post:
       tags: [Project]
-      summary: Archive or unarchive project
+      summary: Archive project
       parameters:
         - $ref: '#/components/parameters/WorkspaceId'
         - $ref: '#/components/parameters/ProjectId'
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              type: object
-              properties:
-                archived:
-                  type: boolean
-              required: [archived]
       responses:
         '200':
-          description: Archive status updated
+          description: Archived
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/SuccessResponse'
+                $ref: '#/components/schemas/ProjectResponse'
 
-  # ========================
-  # P0 - Task core + Subtask
-  # ========================
-  /workspaces/{workspaceId}/projects/{projectId}/tasks:
+  /workspaces/{workspaceId}/projects/{projectId}/unarchive:
     post:
-      tags: [Task]
-      summary: Create task in project
+      tags: [Project]
+      summary: Unarchive project
       parameters:
         - $ref: '#/components/parameters/WorkspaceId'
         - $ref: '#/components/parameters/ProjectId'
+      responses:
+        '200':
+          description: Unarchived
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProjectResponse'
+
+  /workspaces/{workspaceId}/tasks:
+    post:
+      tags: [Task]
+      summary: Create task
+      parameters:
+        - $ref: '#/components/parameters/WorkspaceId'
       requestBody:
         required: true
         content:
@@ -334,37 +460,36 @@ paths:
               $ref: '#/components/schemas/CreateTaskRequest'
       responses:
         '201':
-          description: Task created
+          description: Created
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/TaskResponse'
     get:
       tags: [Task]
-      summary: List project tasks
+      summary: List tasks
       parameters:
         - $ref: '#/components/parameters/WorkspaceId'
-        - $ref: '#/components/parameters/ProjectId'
         - $ref: '#/components/parameters/Page'
         - $ref: '#/components/parameters/Limit'
       responses:
         '200':
-          description: Task list
+          description: Tasks
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/TaskListResponse'
+                $ref: '#/components/schemas/PaginatedTaskResponse'
 
   /workspaces/{workspaceId}/tasks/{taskId}:
     get:
       tags: [Task]
-      summary: Get task by id
+      summary: Get task detail
       parameters:
         - $ref: '#/components/parameters/WorkspaceId'
         - $ref: '#/components/parameters/TaskId'
       responses:
         '200':
-          description: Task detail
+          description: Task
           content:
             application/json:
               schema:
@@ -383,7 +508,7 @@ paths:
               $ref: '#/components/schemas/UpdateTaskRequest'
       responses:
         '200':
-          description: Task updated
+          description: Updated
           content:
             application/json:
               schema:
@@ -396,384 +521,16 @@ paths:
         - $ref: '#/components/parameters/TaskId'
       responses:
         '200':
-          description: Task deleted
+          description: Deleted
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/SuccessResponse'
 
-  /workspaces/{workspaceId}/tasks/{taskId}/status:
-    patch:
-      tags: [Task]
-      summary: Update task status
-      parameters:
-        - $ref: '#/components/parameters/WorkspaceId'
-        - $ref: '#/components/parameters/TaskId'
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              type: object
-              properties:
-                status:
-                  type: string
-              required: [status]
-      responses:
-        '200':
-          description: Status updated
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/SuccessResponse'
-
-  /workspaces/{workspaceId}/tasks/{taskId}/assignees:
-    patch:
-      tags: [Task]
-      summary: Update assignees
-      parameters:
-        - $ref: '#/components/parameters/WorkspaceId'
-        - $ref: '#/components/parameters/TaskId'
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              type: object
-              properties:
-                assigneeIds:
-                  type: array
-                  items:
-                    type: string
-              required: [assigneeIds]
-      responses:
-        '200':
-          description: Assignees updated
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/SuccessResponse'
-
-  /workspaces/{workspaceId}/tasks/{taskId}/due-date:
-    patch:
-      tags: [Task]
-      summary: Update due date
-      parameters:
-        - $ref: '#/components/parameters/WorkspaceId'
-        - $ref: '#/components/parameters/TaskId'
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              type: object
-              properties:
-                dueDate:
-                  type: string
-                  format: date-time
-                  nullable: true
-              required: [dueDate]
-      responses:
-        '200':
-          description: Due date updated
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/SuccessResponse'
-
-  /workspaces/{workspaceId}/tasks/{taskId}/watchers:
-    post:
-      tags: [Task]
-      summary: Add watcher
-      parameters:
-        - $ref: '#/components/parameters/WorkspaceId'
-        - $ref: '#/components/parameters/TaskId'
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              type: object
-              properties:
-                memberId:
-                  type: string
-              required: [memberId]
-      responses:
-        '200':
-          description: Watcher added
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/SuccessResponse'
-
-  /workspaces/{workspaceId}/tasks/{taskId}/watchers/{memberId}:
-    delete:
-      tags: [Task]
-      summary: Remove watcher
-      parameters:
-        - $ref: '#/components/parameters/WorkspaceId'
-        - $ref: '#/components/parameters/TaskId'
-        - $ref: '#/components/parameters/MemberId'
-      responses:
-        '200':
-          description: Watcher removed
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/SuccessResponse'
-
-  /workspaces/{workspaceId}/tasks/{taskId}/labels:
-    post:
-      tags: [Task]
-      summary: Attach label to task
-      parameters:
-        - $ref: '#/components/parameters/WorkspaceId'
-        - $ref: '#/components/parameters/TaskId'
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              type: object
-              properties:
-                labelId:
-                  type: string
-              required: [labelId]
-      responses:
-        '200':
-          description: Label attached
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/SuccessResponse'
-
-  /workspaces/{workspaceId}/tasks/{taskId}/labels/{labelId}:
-    delete:
-      tags: [Task]
-      summary: Detach label from task
-      parameters:
-        - $ref: '#/components/parameters/WorkspaceId'
-        - $ref: '#/components/parameters/TaskId'
-        - $ref: '#/components/parameters/LabelId'
-      responses:
-        '200':
-          description: Label detached
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/SuccessResponse'
-
-  /workspaces/{workspaceId}/tasks/{parentTaskId}/subtasks:
-    post:
-      tags: [Subtask]
-      summary: Create subtask
-      parameters:
-        - $ref: '#/components/parameters/WorkspaceId'
-        - name: parentTaskId
-          in: path
-          required: true
-          schema:
-            type: string
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/CreateTaskRequest'
-      responses:
-        '201':
-          description: Subtask created
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/TaskResponse'
-
-  /workspaces/{workspaceId}/tasks/{taskId}/subtasks:
-    get:
-      tags: [Subtask]
-      summary: List subtasks
-      parameters:
-        - $ref: '#/components/parameters/WorkspaceId'
-        - $ref: '#/components/parameters/TaskId'
-        - $ref: '#/components/parameters/Page'
-        - $ref: '#/components/parameters/Limit'
-      responses:
-        '200':
-          description: Subtask list
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/TaskListResponse'
-
-  /workspaces/{workspaceId}/tasks/{taskId}/tree:
-    get:
-      tags: [Subtask]
-      summary: Get task tree
-      parameters:
-        - $ref: '#/components/parameters/WorkspaceId'
-        - $ref: '#/components/parameters/TaskId'
-      responses:
-        '200':
-          description: Task tree
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/TaskTreeResponse'
-
-  /workspaces/{workspaceId}/tasks/{taskId}/breadcrumb:
-    get:
-      tags: [Subtask]
-      summary: Get task breadcrumb
-      parameters:
-        - $ref: '#/components/parameters/WorkspaceId'
-        - $ref: '#/components/parameters/TaskId'
-      responses:
-        '200':
-          description: Breadcrumb path
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/TaskBreadcrumbResponse'
-
-  /workspaces/{workspaceId}/tasks/{taskId}/parent:
-    patch:
-      tags: [Subtask]
-      summary: Change parent task (must prevent circular reference)
-      parameters:
-        - $ref: '#/components/parameters/WorkspaceId'
-        - $ref: '#/components/parameters/TaskId'
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              type: object
-              properties:
-                parentTaskId:
-                  type: string
-                  nullable: true
-              required: [parentTaskId]
-      responses:
-        '200':
-          description: Parent updated
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/SuccessResponse'
-
-  # ========================
-  # P1 - Invitation
-  # ========================
-  /workspaces/{workspaceId}/invitations:
-    post:
-      tags: [Invitation]
-      summary: Create invitation
-      parameters:
-        - $ref: '#/components/parameters/WorkspaceId'
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/CreateInvitationRequest'
-      responses:
-        '201':
-          description: Invitation created
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/InvitationResponse'
-    get:
-      tags: [Invitation]
-      summary: List invitations
-      parameters:
-        - $ref: '#/components/parameters/WorkspaceId'
-        - $ref: '#/components/parameters/Page'
-        - $ref: '#/components/parameters/Limit'
-      responses:
-        '200':
-          description: Invitation list
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/InvitationListResponse'
-
-  /invitations/{token}/accept:
-    post:
-      tags: [Invitation]
-      summary: Accept invitation
-      security: []
-      parameters:
-        - name: token
-          in: path
-          required: true
-          schema:
-            type: string
-      responses:
-        '200':
-          description: Invitation accepted
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/InvitationAcceptResponse'
-
-  /workspaces/{workspaceId}/invitations/{invitationId}/revoke:
-    post:
-      tags: [Invitation]
-      summary: Revoke invitation
-      parameters:
-        - $ref: '#/components/parameters/WorkspaceId'
-        - $ref: '#/components/parameters/InvitationId'
-      responses:
-        '200':
-          description: Invitation revoked
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/SuccessResponse'
-
-  /workspaces/{workspaceId}/invitations/{invitationId}/resend:
-    post:
-      tags: [Invitation]
-      summary: Resend invitation
-      parameters:
-        - $ref: '#/components/parameters/WorkspaceId'
-        - $ref: '#/components/parameters/InvitationId'
-      responses:
-        '200':
-          description: Invitation resent
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/InvitationResponse'
-
-  /workspaces/{workspaceId}/invitations/expire-stale:
-    post:
-      tags: [Invitation]
-      summary: Expire stale invitations
-      parameters:
-        - $ref: '#/components/parameters/WorkspaceId'
-      responses:
-        '200':
-          description: Expiration summary
-          content:
-            application/json:
-              schema:
-                type: object
-                properties:
-                  data:
-                    type: object
-                    properties:
-                      expiredCount:
-                        type: integer
-
-  # ========================
-  # P1 - Comment
-  # ========================
   /workspaces/{workspaceId}/tasks/{taskId}/comments:
     post:
       tags: [Comment]
-      summary: Create comment/reply
+      summary: Create comment
       parameters:
         - $ref: '#/components/parameters/WorkspaceId'
         - $ref: '#/components/parameters/TaskId'
@@ -785,7 +542,7 @@ paths:
               $ref: '#/components/schemas/CreateCommentRequest'
       responses:
         '201':
-          description: Comment created
+          description: Created
           content:
             application/json:
               schema:
@@ -796,33 +553,18 @@ paths:
       parameters:
         - $ref: '#/components/parameters/WorkspaceId'
         - $ref: '#/components/parameters/TaskId'
-        - $ref: '#/components/parameters/Page'
-        - $ref: '#/components/parameters/Limit'
       responses:
         '200':
-          description: Comment list
+          description: Comments
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/CommentListResponse'
+                $ref: '#/components/schemas/PaginatedCommentResponse'
 
   /workspaces/{workspaceId}/comments/{commentId}:
-    get:
-      tags: [Comment]
-      summary: Get comment by id
-      parameters:
-        - $ref: '#/components/parameters/WorkspaceId'
-        - $ref: '#/components/parameters/CommentId'
-      responses:
-        '200':
-          description: Comment detail
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/CommentResponse'
     patch:
       tags: [Comment]
-      summary: Edit comment
+      summary: Update comment
       parameters:
         - $ref: '#/components/parameters/WorkspaceId'
         - $ref: '#/components/parameters/CommentId'
@@ -831,14 +573,10 @@ paths:
         content:
           application/json:
             schema:
-              type: object
-              properties:
-                content:
-                  type: string
-              required: [content]
+              $ref: '#/components/schemas/UpdateCommentRequest'
       responses:
         '200':
-          description: Comment updated
+          description: Updated
           content:
             application/json:
               schema:
@@ -851,143 +589,66 @@ paths:
         - $ref: '#/components/parameters/CommentId'
       responses:
         '200':
-          description: Comment deleted
+          description: Deleted
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/SuccessResponse'
 
-  # ========================
-  # P1 - Activity
-  # ========================
-  /workspaces/{workspaceId}/tasks/{taskId}/activities:
-    get:
-      tags: [Activity]
-      summary: List task activities
+  /workspaces/{workspaceId}/tasks/{taskId}/attachments:
+    post:
+      tags: [Attachment]
+      summary: Create attachment metadata
       parameters:
         - $ref: '#/components/parameters/WorkspaceId'
         - $ref: '#/components/parameters/TaskId'
-        - $ref: '#/components/parameters/Page'
-        - $ref: '#/components/parameters/Limit'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateAttachmentRequest'
       responses:
-        '200':
-          description: Activity list
+        '201':
+          description: Created
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/ActivityListResponse'
-
-  /workspaces/{workspaceId}/activities:
+                $ref: '#/components/schemas/AttachmentResponse'
     get:
-      tags: [Activity]
-      summary: List workspace activities
+      tags: [Attachment]
+      summary: List attachments by task
       parameters:
         - $ref: '#/components/parameters/WorkspaceId'
-        - $ref: '#/components/parameters/Page'
-        - $ref: '#/components/parameters/Limit'
+        - $ref: '#/components/parameters/TaskId'
       responses:
         '200':
-          description: Activity list
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ActivityListResponse'
-
-  /internal/activities/rebuild:
-    post:
-      tags: [Internal]
-      summary: Rebuild activity logs (internal)
-      responses:
-        '200':
-          description: Rebuild summary
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/SuccessResponse'
-
-  # ========================
-  # P1 - Notification
-  # ========================
-  /workspaces/{workspaceId}/notifications:
-    get:
-      tags: [Notification]
-      summary: List notifications
-      parameters:
-        - $ref: '#/components/parameters/WorkspaceId'
-        - $ref: '#/components/parameters/Page'
-        - $ref: '#/components/parameters/Limit'
-      responses:
-        '200':
-          description: Notification list
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/NotificationListResponse'
-
-  /workspaces/{workspaceId}/notifications/unread-count:
-    get:
-      tags: [Notification]
-      summary: Get unread notification count
-      parameters:
-        - $ref: '#/components/parameters/WorkspaceId'
-      responses:
-        '200':
-          description: Unread count
+          description: Attachments
           content:
             application/json:
               schema:
                 type: object
                 properties:
                   data:
-                    type: object
-                    properties:
-                      unreadCount:
-                        type: integer
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Attachment'
 
-  /workspaces/{workspaceId}/notifications/{notificationId}/read:
-    patch:
-      tags: [Notification]
-      summary: Mark one notification as read
+  /workspaces/{workspaceId}/attachments/{attachmentId}:
+    delete:
+      tags: [Attachment]
+      summary: Delete attachment
       parameters:
         - $ref: '#/components/parameters/WorkspaceId'
-        - $ref: '#/components/parameters/NotificationId'
+        - $ref: '#/components/parameters/AttachmentId'
       responses:
         '200':
-          description: Notification updated
+          description: Deleted
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/SuccessResponse'
 
-  /workspaces/{workspaceId}/notifications/read-all:
-    patch:
-      tags: [Notification]
-      summary: Mark all notifications as read
-      parameters:
-        - $ref: '#/components/parameters/WorkspaceId'
-      responses:
-        '200':
-          description: Notifications updated
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/SuccessResponse'
-
-  /internal/notifications/dispatch:
-    post:
-      tags: [Internal]
-      summary: Dispatch notifications by event (internal)
-      responses:
-        '200':
-          description: Dispatch summary
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/SuccessResponse'
-
-  # ========================
-  # P2 - Label
-  # ========================
   /workspaces/{workspaceId}/labels:
     post:
       tags: [Label]
@@ -1002,7 +663,7 @@ paths:
               $ref: '#/components/schemas/CreateLabelRequest'
       responses:
         '201':
-          description: Label created
+          description: Created
           content:
             application/json:
               schema:
@@ -1014,11 +675,16 @@ paths:
         - $ref: '#/components/parameters/WorkspaceId'
       responses:
         '200':
-          description: Label list
+          description: Labels
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/LabelListResponse'
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Label'
 
   /workspaces/{workspaceId}/labels/{labelId}:
     patch:
@@ -1035,7 +701,7 @@ paths:
               $ref: '#/components/schemas/UpdateLabelRequest'
       responses:
         '200':
-          description: Label updated
+          description: Updated
           content:
             application/json:
               schema:
@@ -1048,72 +714,136 @@ paths:
         - $ref: '#/components/parameters/LabelId'
       responses:
         '200':
-          description: Label deleted
+          description: Deleted
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/SuccessResponse'
 
-  # ========================
-  # P2 - Attachment metadata
-  # ========================
-  /workspaces/{workspaceId}/tasks/{taskId}/attachments:
+  /workspaces/{workspaceId}/invitations:
     post:
-      tags: [Attachment]
-      summary: Create attachment metadata
+      tags: [Invitation]
+      summary: Create invitation
       parameters:
         - $ref: '#/components/parameters/WorkspaceId'
-        - $ref: '#/components/parameters/TaskId'
       requestBody:
         required: true
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/CreateAttachmentRequest'
+              $ref: '#/components/schemas/CreateInvitationRequest'
       responses:
         '201':
-          description: Attachment created
+          description: Created
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/AttachmentResponse'
+                $ref: '#/components/schemas/InvitationResponse'
     get:
-      tags: [Attachment]
-      summary: List task attachments
+      tags: [Invitation]
+      summary: List invitations
+      parameters:
+        - $ref: '#/components/parameters/WorkspaceId'
+        - $ref: '#/components/parameters/Page'
+        - $ref: '#/components/parameters/Limit'
+      responses:
+        '200':
+          description: Invitations
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedInvitationResponse'
+
+  /invitations/{token}/accept:
+    post:
+      tags: [Invitation]
+      summary: Accept invitation by token
+      parameters:
+        - in: path
+          name: token
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Accepted
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessResponse'
+
+  /workspaces/{workspaceId}/invitations/{invitationId}/revoke:
+    post:
+      tags: [Invitation]
+      summary: Revoke invitation
+      parameters:
+        - $ref: '#/components/parameters/WorkspaceId'
+        - $ref: '#/components/parameters/InvitationId'
+      responses:
+        '200':
+          description: Revoked
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/InvitationResponse'
+
+  /workspaces/{workspaceId}/tasks/{taskId}/activities:
+    get:
+      tags: [TaskActivity]
+      summary: List task activities
       parameters:
         - $ref: '#/components/parameters/WorkspaceId'
         - $ref: '#/components/parameters/TaskId'
+        - $ref: '#/components/parameters/Page'
+        - $ref: '#/components/parameters/Limit'
       responses:
         '200':
-          description: Attachment list
+          description: Activities
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/AttachmentListResponse'
+                $ref: '#/components/schemas/PaginatedTaskActivityResponse'
 
-  /workspaces/{workspaceId}/attachments/{attachmentId}:
+  /workspaces/{workspaceId}/notifications:
     get:
-      tags: [Attachment]
-      summary: Get attachment by id
+      tags: [Notification]
+      summary: List notifications
       parameters:
         - $ref: '#/components/parameters/WorkspaceId'
-        - $ref: '#/components/parameters/AttachmentId'
+        - $ref: '#/components/parameters/Page'
+        - $ref: '#/components/parameters/Limit'
       responses:
         '200':
-          description: Attachment detail
+          description: Notifications
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/AttachmentResponse'
-    delete:
-      tags: [Attachment]
-      summary: Delete attachment metadata
+                $ref: '#/components/schemas/PaginatedNotificationResponse'
+
+  /workspaces/{workspaceId}/notifications/{notificationId}/read:
+    post:
+      tags: [Notification]
+      summary: Mark notification as read
       parameters:
         - $ref: '#/components/parameters/WorkspaceId'
-        - $ref: '#/components/parameters/AttachmentId'
+        - $ref: '#/components/parameters/NotificationId'
       responses:
         '200':
-          description: Attachment deleted
+          description: Updated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/NotificationResponse'
+
+  /workspaces/{workspaceId}/notifications/read-all:
+    post:
+      tags: [Notification]
+      summary: Mark all as read
+      parameters:
+        - $ref: '#/components/parameters/WorkspaceId'
+      responses:
+        '200':
+          description: Updated all
           content:
             application/json:
               schema:
@@ -1127,670 +857,660 @@ components:
       bearerFormat: JWT
 
   parameters:
-    WorkspaceId:
-      name: workspaceId
-      in: path
-      required: true
-      schema:
-        type: string
-    ProjectId:
-      name: projectId
-      in: path
-      required: true
-      schema:
-        type: string
-    TaskId:
-      name: taskId
-      in: path
-      required: true
-      schema:
-        type: string
-    MemberId:
-      name: memberId
-      in: path
-      required: true
-      schema:
-        type: string
-    InvitationId:
-      name: invitationId
-      in: path
-      required: true
-      schema:
-        type: string
-    CommentId:
-      name: commentId
-      in: path
-      required: true
-      schema:
-        type: string
-    NotificationId:
-      name: notificationId
-      in: path
-      required: true
-      schema:
-        type: string
-    LabelId:
-      name: labelId
-      in: path
-      required: true
-      schema:
-        type: string
-    AttachmentId:
-      name: attachmentId
-      in: path
-      required: true
-      schema:
-        type: string
     Page:
-      name: page
       in: query
+      name: page
+      required: false
       schema:
         type: integer
         minimum: 1
         default: 1
     Limit:
-      name: limit
       in: query
+      name: limit
+      required: false
       schema:
         type: integer
         minimum: 1
         maximum: 100
         default: 20
-
-  responses:
-    UnauthorizedError:
-      description: Unauthorized
-      content:
-        application/json:
-          schema:
-            $ref: '#/components/schemas/ErrorResponse'
-    ForbiddenError:
-      description: Forbidden
-      content:
-        application/json:
-          schema:
-            $ref: '#/components/schemas/ErrorResponse'
-    NotFoundError:
-      description: Not found
-      content:
-        application/json:
-          schema:
-            $ref: '#/components/schemas/ErrorResponse'
+    WorkspaceId:
+      in: path
+      name: workspaceId
+      required: true
+      schema:
+        $ref: '#/components/schemas/ObjectId'
+    MemberId:
+      in: path
+      name: memberId
+      required: true
+      schema:
+        $ref: '#/components/schemas/ObjectId'
+    ProjectId:
+      in: path
+      name: projectId
+      required: true
+      schema:
+        $ref: '#/components/schemas/ObjectId'
+    TaskId:
+      in: path
+      name: taskId
+      required: true
+      schema:
+        $ref: '#/components/schemas/ObjectId'
+    CommentId:
+      in: path
+      name: commentId
+      required: true
+      schema:
+        $ref: '#/components/schemas/ObjectId'
+    AttachmentId:
+      in: path
+      name: attachmentId
+      required: true
+      schema:
+        $ref: '#/components/schemas/ObjectId'
+    LabelId:
+      in: path
+      name: labelId
+      required: true
+      schema:
+        $ref: '#/components/schemas/ObjectId'
+    InvitationId:
+      in: path
+      name: invitationId
+      required: true
+      schema:
+        $ref: '#/components/schemas/ObjectId'
+    NotificationId:
+      in: path
+      name: notificationId
+      required: true
+      schema:
+        $ref: '#/components/schemas/ObjectId'
 
   schemas:
-    # Generic wrappers
+    ObjectId:
+      type: string
+      pattern: '^[a-fA-F0-9]{24}$'
+      example: 65f151bc1e2bdbaf0d7fbc12
+    ISODate:
+      type: string
+      format: date-time
+    Provider:
+      type: string
+      enum: [google, github, facebook, email]
+    RoleName:
+      type: string
+      enum: [OWNER, ADMIN, MEMBER]
+    Permission:
+      type: string
+      enum:
+        - CREATE_WORKSPACE
+        - DELETE_WORKSPACE
+        - EDIT_WORKSPACE
+        - MANAGE_WORKSPACE_SETTINGS
+        - ADD_MEMBER
+        - REMOVE_MEMBER
+        - CHANGE_MEMBER_ROLE
+        - CREATE_PROJECT
+        - EDIT_PROJECT
+        - DELETE_PROJECT
+        - CREATE_TASK
+        - EDIT_TASK
+        - DELETE_TASK
+        - VIEW_ONLY
+    MemberStatus:
+      type: string
+      enum: [INVITED, ACTIVE, SUSPENDED, LEFT]
+    ProjectStatus:
+      type: string
+      enum: [ACTIVE, ARCHIVED]
+    TaskStatus:
+      type: string
+      enum: [BACKLOG, TODO, IN_PROGRESS, DONE]
+    TaskPriority:
+      type: string
+      enum: [LOW, MEDIUM, HIGH]
+    InvitationStatus:
+      type: string
+      enum: [PENDING, ACCEPTED, EXPIRED, REVOKED]
+    NotificationType:
+      type: string
+      enum: [TASK_ASSIGNED, TASK_DUE, COMMENT_MENTION, WORKSPACE_INVITE]
+    TaskActivityAction:
+      type: string
+      enum: [CREATED, UPDATED, STATUS_CHANGED, ASSIGNED, COMMENTED, DELETED]
+
+    PaginationMeta:
+      type: object
+      properties:
+        page: { type: integer }
+        limit: { type: integer }
+        total: { type: integer }
+        totalPages: { type: integer }
+      required: [page, limit, total, totalPages]
+
     SuccessResponse:
       type: object
       properties:
+        message: { type: string }
+      required: [message]
+
+    TokenPair:
+      type: object
+      properties:
+        accessToken: { type: string }
+        refreshToken: { type: string }
+      required: [accessToken, refreshToken]
+
+    Account:
+      type: object
+      properties:
+        _id: { $ref: '#/components/schemas/ObjectId' }
+        provider: { $ref: '#/components/schemas/Provider' }
+        providerId: { type: string }
+        userId: { $ref: '#/components/schemas/ObjectId' }
+        tokenExpiry:
+          oneOf:
+            - $ref: '#/components/schemas/ISODate'
+            - type: 'null'
+        createdAt: { $ref: '#/components/schemas/ISODate' }
+        updatedAt: { $ref: '#/components/schemas/ISODate' }
+
+    User:
+      type: object
+      properties:
+        _id: { $ref: '#/components/schemas/ObjectId' }
+        name: { type: string }
+        email: { type: string, format: email }
+        avatar:
+          oneOf:
+            - type: string
+            - type: 'null'
+        isActive: { type: boolean }
+        lastLogin:
+          oneOf:
+            - $ref: '#/components/schemas/ISODate'
+            - type: 'null'
+        currentWorkspace:
+          oneOf:
+            - $ref: '#/components/schemas/ObjectId'
+            - type: 'null'
+        createdAt: { $ref: '#/components/schemas/ISODate' }
+        updatedAt: { $ref: '#/components/schemas/ISODate' }
+
+    Role:
+      type: object
+      properties:
+        _id: { $ref: '#/components/schemas/ObjectId' }
+        name: { $ref: '#/components/schemas/RoleName' }
+        permissions:
+          type: array
+          items: { $ref: '#/components/schemas/Permission' }
+        createdAt: { $ref: '#/components/schemas/ISODate' }
+        updatedAt: { $ref: '#/components/schemas/ISODate' }
+
+    Workspace:
+      type: object
+      properties:
+        _id: { $ref: '#/components/schemas/ObjectId' }
+        name: { type: string }
+        description:
+          oneOf:
+            - type: string
+            - type: 'null'
+        owner: { $ref: '#/components/schemas/ObjectId' }
+        inviteCode: { type: string }
+        createdAt: { $ref: '#/components/schemas/ISODate' }
+        updatedAt: { $ref: '#/components/schemas/ISODate' }
+
+    Member:
+      type: object
+      properties:
+        _id: { $ref: '#/components/schemas/ObjectId' }
+        userId: { $ref: '#/components/schemas/ObjectId' }
+        workspaceId: { $ref: '#/components/schemas/ObjectId' }
+        role:
+          oneOf:
+            - $ref: '#/components/schemas/ObjectId'
+            - $ref: '#/components/schemas/Role'
+        status: { $ref: '#/components/schemas/MemberStatus' }
+        joinedAt: { $ref: '#/components/schemas/ISODate' }
+        createdAt: { $ref: '#/components/schemas/ISODate' }
+        updatedAt: { $ref: '#/components/schemas/ISODate' }
+
+    Project:
+      type: object
+      properties:
+        _id: { $ref: '#/components/schemas/ObjectId' }
+        name: { type: string }
+        key: { type: string }
+        description: { type: string }
+        emoji: { type: string }
+        workspace: { $ref: '#/components/schemas/ObjectId' }
+        status: { $ref: '#/components/schemas/ProjectStatus' }
+        archivedAt:
+          oneOf:
+            - $ref: '#/components/schemas/ISODate'
+            - type: 'null'
+        createdBy: { $ref: '#/components/schemas/ObjectId' }
+        createdAt: { $ref: '#/components/schemas/ISODate' }
+        updatedAt: { $ref: '#/components/schemas/ISODate' }
+
+    Task:
+      type: object
+      properties:
+        _id: { $ref: '#/components/schemas/ObjectId' }
+        taskCode: { type: string }
+        title: { type: string }
+        description: { type: string }
+        project: { $ref: '#/components/schemas/ObjectId' }
+        workspace: { $ref: '#/components/schemas/ObjectId' }
+        status: { $ref: '#/components/schemas/TaskStatus' }
+        priority: { $ref: '#/components/schemas/TaskPriority' }
+        assignedTo:
+          oneOf:
+            - $ref: '#/components/schemas/ObjectId'
+            - type: 'null'
+        createdBy: { $ref: '#/components/schemas/ObjectId' }
+        dueDate:
+          oneOf:
+            - $ref: '#/components/schemas/ISODate'
+            - type: 'null'
+        createdAt: { $ref: '#/components/schemas/ISODate' }
+        updatedAt: { $ref: '#/components/schemas/ISODate' }
+
+    Comment:
+      type: object
+      properties:
+        _id: { $ref: '#/components/schemas/ObjectId' }
+        taskId: { $ref: '#/components/schemas/ObjectId' }
+        workspaceId: { $ref: '#/components/schemas/ObjectId' }
+        authorId: { $ref: '#/components/schemas/ObjectId' }
+        content: { type: string }
+        parentCommentId:
+          oneOf:
+            - $ref: '#/components/schemas/ObjectId'
+            - type: 'null'
+        editedAt:
+          oneOf:
+            - $ref: '#/components/schemas/ISODate'
+            - type: 'null'
+        deletedAt:
+          oneOf:
+            - $ref: '#/components/schemas/ISODate'
+            - type: 'null'
+        createdAt: { $ref: '#/components/schemas/ISODate' }
+        updatedAt: { $ref: '#/components/schemas/ISODate' }
+
+    Attachment:
+      type: object
+      properties:
+        _id: { $ref: '#/components/schemas/ObjectId' }
+        taskId: { $ref: '#/components/schemas/ObjectId' }
+        workspaceId: { $ref: '#/components/schemas/ObjectId' }
+        uploaderId: { $ref: '#/components/schemas/ObjectId' }
+        fileName: { type: string }
+        mimeType: { type: string }
+        size: { type: integer, minimum: 0 }
+        storageKey: { type: string }
+        url: { type: string, format: uri }
+        createdAt: { $ref: '#/components/schemas/ISODate' }
+        updatedAt: { $ref: '#/components/schemas/ISODate' }
+
+    Label:
+      type: object
+      properties:
+        _id: { $ref: '#/components/schemas/ObjectId' }
+        workspaceId: { $ref: '#/components/schemas/ObjectId' }
+        name: { type: string }
+        color: { type: string, example: '#6366F1' }
+        description: { type: string }
+        createdAt: { $ref: '#/components/schemas/ISODate' }
+        updatedAt: { $ref: '#/components/schemas/ISODate' }
+
+    Invitation:
+      type: object
+      properties:
+        _id: { $ref: '#/components/schemas/ObjectId' }
+        workspaceId: { $ref: '#/components/schemas/ObjectId' }
+        email: { type: string, format: email }
+        role: { $ref: '#/components/schemas/ObjectId' }
+        token: { type: string }
+        invitedBy: { $ref: '#/components/schemas/ObjectId' }
+        status: { $ref: '#/components/schemas/InvitationStatus' }
+        expiresAt: { $ref: '#/components/schemas/ISODate' }
+        createdAt: { $ref: '#/components/schemas/ISODate' }
+        updatedAt: { $ref: '#/components/schemas/ISODate' }
+
+    Notification:
+      type: object
+      properties:
+        _id: { $ref: '#/components/schemas/ObjectId' }
+        userId: { $ref: '#/components/schemas/ObjectId' }
+        workspaceId: { $ref: '#/components/schemas/ObjectId' }
+        type: { $ref: '#/components/schemas/NotificationType' }
+        title: { type: string }
+        content: { type: string }
         data:
-          type: object
-          properties:
-            success:
-              type: boolean
-              example: true
-
-    ErrorResponse:
-      type: object
-      properties:
-        error:
-          type: object
-          properties:
-            code:
-              type: string
-            message:
-              type: string
-            details:
-              type: object
+          oneOf:
+            - type: object
               additionalProperties: true
+            - type: 'null'
+        isRead: { type: boolean }
+        readAt:
+          oneOf:
+            - $ref: '#/components/schemas/ISODate'
+            - type: 'null'
+        createdAt: { $ref: '#/components/schemas/ISODate' }
+        updatedAt: { $ref: '#/components/schemas/ISODate' }
 
-    Meta:
+    TaskActivityChange:
       type: object
       properties:
-        page:
-          type: integer
-        limit:
-          type: integer
-        total:
-          type: integer
+        field: { type: string }
+        from:
+          nullable: true
+        to:
+          nullable: true
+      required: [field]
 
-    # Auth
+    TaskActivity:
+      type: object
+      properties:
+        _id: { $ref: '#/components/schemas/ObjectId' }
+        taskId: { $ref: '#/components/schemas/ObjectId' }
+        workspaceId: { $ref: '#/components/schemas/ObjectId' }
+        actorId: { $ref: '#/components/schemas/ObjectId' }
+        action: { $ref: '#/components/schemas/TaskActivityAction' }
+        changes:
+          type: array
+          items: { $ref: '#/components/schemas/TaskActivityChange' }
+        metadata:
+          oneOf:
+            - type: object
+              additionalProperties: true
+            - type: 'null'
+        createdAt: { $ref: '#/components/schemas/ISODate' }
+        updatedAt: { $ref: '#/components/schemas/ISODate' }
+
+    RegisterRequest:
+      type: object
+      properties:
+        name: { type: string }
+        email: { type: string, format: email }
+        password: { type: string, minLength: 6 }
+      required: [name, email, password]
+
     LoginRequest:
       type: object
       properties:
-        email:
-          type: string
-          format: email
-        password:
-          type: string
+        email: { type: string, format: email }
+        password: { type: string }
       required: [email, password]
 
     RefreshTokenRequest:
       type: object
       properties:
-        refreshToken:
-          type: string
+        refreshToken: { type: string }
       required: [refreshToken]
 
-    AuthTokensResponse:
+    AuthResponse:
       type: object
       properties:
         data:
           type: object
           properties:
-            accessToken:
-              type: string
-            refreshToken:
-              type: string
-            user:
-              $ref: '#/components/schemas/User'
+            user: { $ref: '#/components/schemas/User' }
+            tokens: { $ref: '#/components/schemas/TokenPair' }
+          required: [user, tokens]
+      required: [data]
 
-    TokenRefreshResponse:
+    UpdateMeRequest:
       type: object
       properties:
-        data:
-          type: object
-          properties:
-            accessToken:
-              type: string
-            refreshToken:
-              type: string
+        name: { type: string }
+        avatar:
+          oneOf:
+            - type: string
+            - type: 'null'
 
-    WorkspaceContextResponse:
+    SwitchWorkspaceRequest:
       type: object
       properties:
-        data:
-          type: object
-          properties:
-            workspace:
-              $ref: '#/components/schemas/Workspace'
-            member:
-              $ref: '#/components/schemas/Member'
-            permissions:
-              type: array
-              items:
-                type: string
+        workspaceId: { $ref: '#/components/schemas/ObjectId' }
+      required: [workspaceId]
 
-    # Member
-    UpdateMemberRoleRequest:
+    CreateWorkspaceRequest:
       type: object
       properties:
-        role:
-          type: string
-      required: [role]
+        name: { type: string }
+        description:
+          oneOf:
+            - type: string
+            - type: 'null'
+      required: [name]
 
-    UpdateMemberStatusRequest:
+    UpdateWorkspaceRequest:
       type: object
       properties:
-        status:
-          type: string
-      required: [status]
+        name: { type: string }
+        description:
+          oneOf:
+            - type: string
+            - type: 'null'
 
-    MemberResponse:
+    UpdateMemberRequest:
       type: object
       properties:
-        data:
-          $ref: '#/components/schemas/Member'
+        role: { $ref: '#/components/schemas/ObjectId' }
+        status: { $ref: '#/components/schemas/MemberStatus' }
 
-    MemberListResponse:
-      type: object
-      properties:
-        data:
-          type: array
-          items:
-            $ref: '#/components/schemas/Member'
-        meta:
-          $ref: '#/components/schemas/Meta'
-
-    # Project
     CreateProjectRequest:
       type: object
       properties:
-        name:
-          type: string
-        key:
-          type: string
-        description:
-          type: string
+        name: { type: string }
+        key: { type: string }
+        description: { type: string, default: '' }
+        emoji: { type: string, default: '📁' }
       required: [name, key]
 
     UpdateProjectRequest:
       type: object
       properties:
-        name:
-          type: string
-        description:
-          type: string
-        archived:
-          type: boolean
+        name: { type: string }
+        description: { type: string }
+        emoji: { type: string }
+        status: { $ref: '#/components/schemas/ProjectStatus' }
 
-    ProjectResponse:
-      type: object
-      properties:
-        data:
-          $ref: '#/components/schemas/Project'
-
-    ProjectListResponse:
-      type: object
-      properties:
-        data:
-          type: array
-          items:
-            $ref: '#/components/schemas/Project'
-        meta:
-          $ref: '#/components/schemas/Meta'
-
-    ProjectKeyCheckResponse:
-      type: object
-      properties:
-        data:
-          type: object
-          properties:
-            available:
-              type: boolean
-
-    # Task / Subtask
     CreateTaskRequest:
       type: object
       properties:
-        title:
-          type: string
-        description:
-          type: string
-        status:
-          type: string
-        priority:
-          type: string
-        dueDate:
-          type: string
-          format: date-time
-          nullable: true
-        assigneeIds:
-          type: array
-          items:
-            type: string
-        watcherIds:
-          type: array
-          items:
-            type: string
-        labelIds:
-          type: array
-          items:
-            type: string
-      required: [title]
+        title: { type: string }
+        description: { type: string }
+        project: { $ref: '#/components/schemas/ObjectId' }
+        status: { $ref: '#/components/schemas/TaskStatus' }
+        priority: { $ref: '#/components/schemas/TaskPriority' }
+        assignedTo: { $ref: '#/components/schemas/ObjectId' }
+        dueDate: { $ref: '#/components/schemas/ISODate' }
+      required: [title, description, project]
 
     UpdateTaskRequest:
-      allOf:
-        - $ref: '#/components/schemas/CreateTaskRequest'
-
-    TaskResponse:
       type: object
       properties:
-        data:
-          $ref: '#/components/schemas/Task'
+        title: { type: string }
+        description: { type: string }
+        project: { $ref: '#/components/schemas/ObjectId' }
+        status: { $ref: '#/components/schemas/TaskStatus' }
+        priority: { $ref: '#/components/schemas/TaskPriority' }
+        assignedTo:
+          oneOf:
+            - $ref: '#/components/schemas/ObjectId'
+            - type: 'null'
+        dueDate:
+          oneOf:
+            - $ref: '#/components/schemas/ISODate'
+            - type: 'null'
 
-    TaskListResponse:
-      type: object
-      properties:
-        data:
-          type: array
-          items:
-            $ref: '#/components/schemas/Task'
-        meta:
-          $ref: '#/components/schemas/Meta'
-
-    TaskTreeResponse:
-      type: object
-      properties:
-        data:
-          type: object
-          properties:
-            root:
-              $ref: '#/components/schemas/Task'
-            children:
-              type: array
-              items:
-                $ref: '#/components/schemas/Task'
-
-    TaskBreadcrumbResponse:
-      type: object
-      properties:
-        data:
-          type: object
-          properties:
-            path:
-              type: array
-              items:
-                $ref: '#/components/schemas/Task'
-
-    # Invitation
-    CreateInvitationRequest:
-      type: object
-      properties:
-        email:
-          type: string
-          format: email
-        role:
-          type: string
-        expiresAt:
-          type: string
-          format: date-time
-      required: [email, role]
-
-    InvitationResponse:
-      type: object
-      properties:
-        data:
-          $ref: '#/components/schemas/Invitation'
-
-    InvitationListResponse:
-      type: object
-      properties:
-        data:
-          type: array
-          items:
-            $ref: '#/components/schemas/Invitation'
-        meta:
-          $ref: '#/components/schemas/Meta'
-
-    InvitationAcceptResponse:
-      type: object
-      properties:
-        data:
-          type: object
-          properties:
-            workspace:
-              $ref: '#/components/schemas/Workspace'
-            member:
-              $ref: '#/components/schemas/Member'
-
-    # Comment
     CreateCommentRequest:
       type: object
       properties:
-        content:
-          type: string
-        parentCommentId:
-          type: string
-          nullable: true
+        content: { type: string }
+        parentCommentId: { $ref: '#/components/schemas/ObjectId' }
       required: [content]
 
-    CommentResponse:
+    UpdateCommentRequest:
       type: object
       properties:
-        data:
-          $ref: '#/components/schemas/Comment'
+        content: { type: string }
+      required: [content]
 
-    CommentListResponse:
+    CreateAttachmentRequest:
       type: object
       properties:
-        data:
-          type: array
-          items:
-            $ref: '#/components/schemas/Comment'
-        meta:
-          $ref: '#/components/schemas/Meta'
+        fileName: { type: string }
+        mimeType: { type: string }
+        size: { type: integer, minimum: 0 }
+        storageKey: { type: string }
+        url: { type: string, format: uri }
+      required: [fileName, mimeType, size, storageKey, url]
 
-    # Activity
-    ActivityListResponse:
-      type: object
-      properties:
-        data:
-          type: array
-          items:
-            $ref: '#/components/schemas/TaskActivity'
-        meta:
-          $ref: '#/components/schemas/Meta'
-
-    # Notification
-    NotificationListResponse:
-      type: object
-      properties:
-        data:
-          type: array
-          items:
-            $ref: '#/components/schemas/Notification'
-        meta:
-          $ref: '#/components/schemas/Meta'
-
-    # Label
     CreateLabelRequest:
       type: object
       properties:
-        name:
-          type: string
-        color:
-          type: string
-      required: [name, color]
+        name: { type: string }
+        color: { type: string }
+        description: { type: string }
+      required: [name]
 
     UpdateLabelRequest:
       type: object
       properties:
-        name:
-          type: string
-        color:
-          type: string
+        name: { type: string }
+        color: { type: string }
+        description: { type: string }
 
-    LabelResponse:
+    CreateInvitationRequest:
       type: object
       properties:
-        data:
-          $ref: '#/components/schemas/Label'
+        email: { type: string, format: email }
+        role: { $ref: '#/components/schemas/ObjectId' }
+        expiresAt: { $ref: '#/components/schemas/ISODate' }
+      required: [email, role, expiresAt]
 
-    LabelListResponse:
+    UserResponse:
       type: object
       properties:
-        data:
-          type: array
-          items:
-            $ref: '#/components/schemas/Label'
-
-    # Attachment
-    CreateAttachmentRequest:
+        data: { $ref: '#/components/schemas/User' }
+      required: [data]
+    WorkspaceResponse:
       type: object
       properties:
-        fileName:
-          type: string
-        mimeType:
-          type: string
-        size:
-          type: integer
-        storageKey:
-          type: string
-      required: [fileName, mimeType, size, storageKey]
-
+        data: { $ref: '#/components/schemas/Workspace' }
+      required: [data]
+    MemberResponse:
+      type: object
+      properties:
+        data: { $ref: '#/components/schemas/Member' }
+      required: [data]
+    ProjectResponse:
+      type: object
+      properties:
+        data: { $ref: '#/components/schemas/Project' }
+      required: [data]
+    TaskResponse:
+      type: object
+      properties:
+        data: { $ref: '#/components/schemas/Task' }
+      required: [data]
+    CommentResponse:
+      type: object
+      properties:
+        data: { $ref: '#/components/schemas/Comment' }
+      required: [data]
     AttachmentResponse:
       type: object
       properties:
-        data:
-          $ref: '#/components/schemas/Attachment'
+        data: { $ref: '#/components/schemas/Attachment' }
+      required: [data]
+    LabelResponse:
+      type: object
+      properties:
+        data: { $ref: '#/components/schemas/Label' }
+      required: [data]
+    InvitationResponse:
+      type: object
+      properties:
+        data: { $ref: '#/components/schemas/Invitation' }
+      required: [data]
+    NotificationResponse:
+      type: object
+      properties:
+        data: { $ref: '#/components/schemas/Notification' }
+      required: [data]
 
-    AttachmentListResponse:
+    PaginatedWorkspaceResponse:
       type: object
       properties:
         data:
           type: array
-          items:
-            $ref: '#/components/schemas/Attachment'
-
-    # Domain entities (minimal skeleton)
-    User:
+          items: { $ref: '#/components/schemas/Workspace' }
+        meta: { $ref: '#/components/schemas/PaginationMeta' }
+      required: [data, meta]
+    PaginatedMemberResponse:
       type: object
       properties:
-        id:
-          type: string
-        email:
-          type: string
-          format: email
-        name:
-          type: string
-
-    Workspace:
+        data:
+          type: array
+          items: { $ref: '#/components/schemas/Member' }
+        meta: { $ref: '#/components/schemas/PaginationMeta' }
+      required: [data, meta]
+    PaginatedProjectResponse:
       type: object
       properties:
-        id:
-          type: string
-        name:
-          type: string
-
-    Member:
+        data:
+          type: array
+          items: { $ref: '#/components/schemas/Project' }
+        meta: { $ref: '#/components/schemas/PaginationMeta' }
+      required: [data, meta]
+    PaginatedTaskResponse:
       type: object
       properties:
-        id:
-          type: string
-        userId:
-          type: string
-        workspaceId:
-          type: string
-        role:
-          type: string
-        status:
-          type: string
-
-    Project:
+        data:
+          type: array
+          items: { $ref: '#/components/schemas/Task' }
+        meta: { $ref: '#/components/schemas/PaginationMeta' }
+      required: [data, meta]
+    PaginatedCommentResponse:
       type: object
       properties:
-        id:
-          type: string
-        workspaceId:
-          type: string
-        name:
-          type: string
-        key:
-          type: string
-        description:
-          type: string
-        archived:
-          type: boolean
-
-    Task:
+        data:
+          type: array
+          items: { $ref: '#/components/schemas/Comment' }
+        meta: { $ref: '#/components/schemas/PaginationMeta' }
+      required: [data, meta]
+    PaginatedInvitationResponse:
       type: object
       properties:
-        id:
-          type: string
-        workspaceId:
-          type: string
-        projectId:
-          type: string
-        parentTaskId:
-          type: string
-          nullable: true
-        title:
-          type: string
-        description:
-          type: string
-        status:
-          type: string
-        priority:
-          type: string
-        dueDate:
-          type: string
-          format: date-time
-          nullable: true
-        subtaskCount:
-          type: integer
-
-    Invitation:
+        data:
+          type: array
+          items: { $ref: '#/components/schemas/Invitation' }
+        meta: { $ref: '#/components/schemas/PaginationMeta' }
+      required: [data, meta]
+    PaginatedNotificationResponse:
       type: object
       properties:
-        id:
-          type: string
-        workspaceId:
-          type: string
-        email:
-          type: string
-          format: email
-        role:
-          type: string
-        status:
-          type: string
-        token:
-          type: string
-        expiresAt:
-          type: string
-          format: date-time
-
-    Comment:
+        data:
+          type: array
+          items: { $ref: '#/components/schemas/Notification' }
+        meta: { $ref: '#/components/schemas/PaginationMeta' }
+      required: [data, meta]
+    PaginatedTaskActivityResponse:
       type: object
       properties:
-        id:
-          type: string
-        workspaceId:
-          type: string
-        taskId:
-          type: string
-        parentCommentId:
-          type: string
-          nullable: true
-        content:
-          type: string
-        isDeleted:
-          type: boolean
-
-    TaskActivity:
-      type: object
-      properties:
-        id:
-          type: string
-        workspaceId:
-          type: string
-        taskId:
-          type: string
-        type:
-          type: string
-        actorId:
-          type: string
-        payload:
-          type: object
-          additionalProperties: true
-        createdAt:
-          type: string
-          format: date-time
-
-    Notification:
-      type: object
-      properties:
-        id:
-          type: string
-        workspaceId:
-          type: string
-        memberId:
-          type: string
-        type:
-          type: string
-        payload:
-          type: object
-          additionalProperties: true
-        readAt:
-          type: string
-          format: date-time
-          nullable: true
-
-    Label:
-      type: object
-      properties:
-        id:
-          type: string
-        workspaceId:
-          type: string
-        name:
-          type: string
-        color:
-          type: string
-
-    Attachment:
-      type: object
-      properties:
-        id:
-          type: string
-        workspaceId:
-          type: string
-        taskId:
-          type: string
-        fileName:
-          type: string
-        mimeType:
-          type: string
-        size:
-          type: integer
-        storageKey:
-          type: string
+        data:
+          type: array
+          items: { $ref: '#/components/schemas/TaskActivity' }
+        meta: { $ref: '#/components/schemas/PaginationMeta' }
+      required: [data, meta]
