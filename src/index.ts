@@ -9,9 +9,12 @@ import { HTTPSTATUS } from "./config/http.config";
 import { asyncHandler } from "./middlewares/asyncHandler.middleware";
 import { BadRequestException, UnauthorizedException } from "./utils/appError";
 import { ErrorCodeEnum } from "./enums/error-code.enum";
+import { setupSwagger } from "./config/swagger.config";
 
 const app = express();
 const BASE_PATH = config.BASE_PATH;
+
+setupSwagger(app);
 
 app.use(express.json());
 
