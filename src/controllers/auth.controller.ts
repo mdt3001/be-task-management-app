@@ -1,6 +1,9 @@
 import { config } from "../config/app.config";
 import { asyncHandler } from "../middlewares/asyncHandler.middleware";
 import { Request, Response } from "express";
+import { registerSchema } from "../validation/auth.validation"
+import { HTTPSTATUS } from "../config/http.config";
+import { registerService } from "../services/auth.service";
 
 export const googleLoginCallback = asyncHandler(
     async (req: Request, res: Response) => { 
@@ -10,5 +13,16 @@ export const googleLoginCallback = asyncHandler(
         }
 
         return res.redirect(`${config.FRONTEND_ORIGIN}/workspace/${currentWorkspace}`);
+    }
+);
+
+export const register = asyncHandler(
+    async (req: Request, res: Response) => { 
+        const body = registerSchema.parse({ ...req.body });
+        await registerService(body);
+
+        return res.status(HTTPSTATUS.CREATED).json({
+            message: "User registered successfully",
+        });
     }
 );

@@ -1,11 +1,11 @@
-import { ProviderType } from './../enums/account-provider.enum';
+import { ProviderEnum, ProviderType } from './../enums/account-provider.enum';
 import WorkspaceModel from './../models/workspace.model';
 import UserModel from "../models/user.model";
 import mongoose from "mongoose";
 import AccountModel from '../models/account.model';
 import RoleModel from '../models/role.model';
 import { RolesEnum } from '../enums/role.enum';
-import { NotFoundException } from '../utils/appError';
+import { BadRequestException, NotFoundException } from '../utils/appError';
 import MemberModel from '../models/member.model';
 
 export const loginOrCreateAccountService = async (data: {
@@ -102,3 +102,76 @@ export const loginOrCreateAccountService = async (data: {
         session.endSession();   
     }
 }
+
+export const registerService = async (data: {
+    email: string;
+    name: string;
+    password: string;
+}) => {
+    const { email, name, password } = data;
+    const session = await mongoose.startSession();
+    session.startTransaction();
+
+    try {
+        const existingUser = await UserModel.findOne({ email }).session(session);
+        if (existingUser) {
+            throw new BadRequestException("Email is already registered");
+        }
+
+        // Create new user
+        const user = new UserModel({
+            email,
+            name,
+            password,
+        });
+        await user.save({ session });
+
+        const account = new AccountModel({
+            userId: user._id,
+            provider: ProviderEnum.EMAIL,
+            providerId: email,
+        });
+        await account.save({ session });
+
+        const workspace = new WorkspaceModel({
+            name: `My Workspace`,
+            description: `Workspace created for ${user.name}`,
+            owner: user._id,
+        });
+        await workspace.save({ session });
+
+        const ownerRole = await RoleModel.findOne({
+            name: RolesEnum.OWNER,
+        }).session(session);
+
+        if (!ownerRole) {
+            throw new NotFoundException("Owner role not found");
+        }
+
+        const member = new MemberModel({
+            userId: user._id,
+            workspaceId: workspace._id,
+            role: ownerRole._id,
+            joinedAt: new Date(),
+        });
+        await member.save({ session });
+
+        user.currentWorkspace = workspace._id as mongoose.Types.ObjectId;
+        await user.save({ session });
+
+        await session.commitTransaction();
+        session.endSession();
+
+        return {
+            userId: user._id,
+            workspaceId: workspace._id,
+        }
+
+    } catch (error) {
+        await session.abortTransaction();
+        await session.endSession();
+        throw error;
+    } finally {
+        session.endSession();
+    }
+};
