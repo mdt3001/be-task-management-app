@@ -1,16 +1,17 @@
 import "dotenv/config";
 import express, { Request, Response, NextFunction } from "express";
 import cors from "cors";
-import session from "cookie-session";
+import session from "express-session";
 import { config } from "./config/app.config";
 import connectDB from "./config/database.config";
 import { errorHandler } from "./middlewares/errorHandler.middleware";
-import { HTTPSTATUS } from "./config/http.config";
 import { asyncHandler } from "./middlewares/asyncHandler.middleware";
 import { BadRequestException, UnauthorizedException } from "./utils/appError";
 import { ErrorCodeEnum } from "./enums/error-code.enum";
 import { setupSwagger } from "./config/swagger.config";
-
+import passport from "./config/passport.config";
+import authRoutes from "./routes/auth.route";
+import MongoStore from "connect-mongo";
 const app = express();
 const BASE_PATH = config.BASE_PATH;
 
@@ -19,15 +20,28 @@ setupSwagger(app);
 app.use(express.json());
 
 app.use(
-    session({
-        name: "session",
-        keys: [config.SESSION_SECRET],
-        maxAge: 24 * 60 * 60 * 1000, // 1 day
-        secure: config.NODE_ENV === "production",
-        httpOnly: true,
-        sameSite: "lax",
-    })
-)
+  session({
+    name: "session",
+    secret: config.SESSION_SECRET,
+    resave: false,
+      saveUninitialized: false,
+      store: config.NODE_ENV === "production"
+        ? (MongoStore.create({
+            mongoUrl: config.MONGO_URI,
+            collectionName: "sessions"
+        }))
+        : undefined,
+    cookie: {
+      maxAge: 24 * 60 * 60 * 1000,
+      secure: config.NODE_ENV === "production",
+      httpOnly: true,
+      sameSite: "lax",
+    },
+  })
+);
+
+app.use(passport.initialize());
+app.use(passport.session());
 
 app.use(
     cors({
@@ -40,7 +54,10 @@ app.get('/', asyncHandler(async (req: Request, res: Response, next: NextFunction
     throw new BadRequestException("This is a bad request example", ErrorCodeEnum.VALIDATION_ERROR);
 }));
 
+app.use(`${BASE_PATH}/auth`, authRoutes);
+
 app.use(errorHandler);
+
 
 app.listen(config.PORT, async() => {
     console.log(`Server is running on port ${config.PORT}`);
