@@ -8,6 +8,37 @@ import { RolesEnum } from '../enums/role.enum';
 import { BadRequestException, NotFoundException } from '../utils/appError';
 import MemberModel from '../models/member.model';
 
+// Shared helper: create default workspace, OWNER member, set user's currentWorkspace
+async function createDefaultWorkspaceAndMember(session: mongoose.ClientSession, user: any) {
+    const workspace = new WorkspaceModel({
+        name: `My Workspace`,
+        description: `Workspace created for ${user.name}`,
+        owner: user._id,
+    });
+    await workspace.save({ session });
+
+    const ownerRole = await RoleModel.findOne({
+        name: RolesEnum.OWNER,
+    }).session(session);
+
+    if (!ownerRole) {
+        throw new NotFoundException('Owner role not found');
+    }
+
+    const member = new MemberModel({
+        userId: user._id,
+        workspaceId: workspace._id,
+        role: ownerRole._id,
+        joinedAt: new Date(),
+    });
+    await member.save({ session });
+
+    user.currentWorkspace = workspace._id as mongoose.Types.ObjectId;
+    await user.save({ session });
+
+    return workspace;
+}
+
 export const loginOrCreateAccountService = async (data: {
     provider: ProviderType;
     displayName: string;
@@ -36,7 +67,13 @@ export const loginOrCreateAccountService = async (data: {
                 throw new NotFoundException("User linked to account not found");
             }
         } else {
-            // Step 2: No account found, try to find user by email
+            // Step 2: No account found. If provider didn't return an email, we cannot
+            // look up or create a user because email is required by the User model.
+            if (!email) {
+                throw new BadRequestException("Email not provided by identity provider");
+            }
+
+            // Try to find user by normalized email
             user = await UserModel.findOne({ email }).session(session);
 
             if (!user) {
@@ -62,35 +99,7 @@ export const loginOrCreateAccountService = async (data: {
 
         // Step 6: Setup onboarding only if user is new
         if (isNewUser) {
-            // Create default workspace
-            const workspace = new WorkspaceModel({
-                name: `My Workspace`,
-                description: `Workspace created for ${user.name}`,
-                owner: user._id,
-            });
-            await workspace.save({ session });
-
-            // Get OWNER role
-            const ownerRole = await RoleModel.findOne({
-                name: RolesEnum.OWNER,
-            }).session(session);
-
-            if (!ownerRole) {
-                throw new NotFoundException("Owner role not found");
-            }
-
-            // Create member with OWNER role
-            const member = new MemberModel({
-                userId: user._id,
-                workspaceId: workspace._id,
-                role: ownerRole._id,
-                joinedAt: new Date(),
-            });
-            await member.save({ session });
-
-            // Set current workspace for user
-            user.currentWorkspace = workspace._id as mongoose.Types.ObjectId;
-            await user.save({ session });
+            await createDefaultWorkspaceAndMember(session, user);
         }
 
         // Step 7: Commit transaction
@@ -137,31 +146,7 @@ export const registerService = async (data: {
         });
         await account.save({ session });
 
-        const workspace = new WorkspaceModel({
-            name: `My Workspace`,
-            description: `Workspace created for ${user.name}`,
-            owner: user._id,
-        });
-        await workspace.save({ session });
-
-        const ownerRole = await RoleModel.findOne({
-            name: RolesEnum.OWNER,
-        }).session(session);
-
-        if (!ownerRole) {
-            throw new NotFoundException("Owner role not found");
-        }
-
-        const member = new MemberModel({
-            userId: user._id,
-            workspaceId: workspace._id,
-            role: ownerRole._id,
-            joinedAt: new Date(),
-        });
-        await member.save({ session });
-
-        user.currentWorkspace = workspace._id as mongoose.Types.ObjectId;
-        await user.save({ session });
+        const workspace = await createDefaultWorkspaceAndMember(session, user);
 
         await session.commitTransaction();
 
