@@ -15,7 +15,9 @@ export const loginOrCreateAccountService = async (data: {
     picture?: string;
     email?: string;
 }) => {
-    const { provider, displayName, providerId, picture, email } = data;
+    const { provider, displayName, providerId, picture, email: rawEmail } = data;
+    // Normalize email once: lowercase and trim
+    const email = rawEmail ? rawEmail.toLowerCase().trim() : undefined;
 
     const session = await mongoose.startSession();
 
@@ -108,11 +110,13 @@ export const registerService = async (data: {
     name: string;
     password: string;
 }) => {
-    const { email, name, password } = data;
+    const { email: rawEmail, name, password } = data;
+    // Normalize email once: lowercase and trim
+    const email = rawEmail.toLowerCase().trim();
     const session = await mongoose.startSession();
-    session.startTransaction();
 
     try {
+        session.startTransaction();
         const existingUser = await UserModel.findOne({ email }).session(session);
         if (existingUser) {
             throw new BadRequestException("Email is already registered");
@@ -160,7 +164,6 @@ export const registerService = async (data: {
         await user.save({ session });
 
         await session.commitTransaction();
-        session.endSession();
 
         return {
             userId: user._id,
@@ -169,7 +172,6 @@ export const registerService = async (data: {
 
     } catch (error) {
         await session.abortTransaction();
-        await session.endSession();
         throw error;
     } finally {
         session.endSession();
