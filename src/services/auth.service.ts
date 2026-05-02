@@ -5,7 +5,7 @@ import mongoose from "mongoose";
 import AccountModel from '../models/account.model';
 import RoleModel from '../models/role.model';
 import { RolesEnum } from '../enums/role.enum';
-import { BadRequestException, NotFoundException } from '../utils/appError';
+import { BadRequestException, NotFoundException, UnauthorizedException } from '../utils/appError';
 import MemberModel from '../models/member.model';
 
 // Shared helper: create default workspace, OWNER member, set user's currentWorkspace
@@ -161,4 +161,20 @@ export const registerService = async (data: {
     } finally {
         session.endSession();
     }
+};
+
+export const verifyUserService = async ({email, password, provider = ProviderEnum.EMAIL}: {email: string, password: string, provider: ProviderType}) => {
+    const account = await AccountModel.findOne({ provider, providerId: email.toLowerCase().trim() });
+    if (!account) {
+        throw new UnauthorizedException("Invalid email or password");
+    }
+    const user = await UserModel.findById(account.userId).select("+password");
+    if (!user) {
+        throw new UnauthorizedException("Invalid email or password");
+    }
+    const isMatch = await user.comparePassword(password);
+    if (!isMatch) {
+        throw new UnauthorizedException("Invalid email or password");
+    }
+    return user.omitPassword();
 };
