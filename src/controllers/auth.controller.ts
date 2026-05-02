@@ -57,3 +57,36 @@ export const login = asyncHandler(
          })(req, res, next);
     }
 );
+
+export const logout = asyncHandler(
+    async (req: Request, res: Response) => {
+        return new Promise<void>((resolve, reject) => {
+            req.logout((err) => {
+                if (err) {
+                    return res.status(HTTPSTATUS.INTERNAL_SERVER_ERROR).json({
+                        message: "Logout failed",
+                    });
+                }
+            
+                if (req.session) {
+                    req.session.destroy((err) => {
+                        if (err) {
+                            return res.status(HTTPSTATUS.INTERNAL_SERVER_ERROR).json({
+                                message: "Logout failed",
+                            });
+                        }
+                        res.json({
+                            message: "Logout successful",
+                        });
+                        resolve();
+                    });
+                } else {
+                    res.json({
+                        message: "Logout successful",
+                    });
+                    resolve();
+                }
+            });
+        });
+    }
+);
