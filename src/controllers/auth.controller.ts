@@ -1,9 +1,11 @@
 import { config } from "../config/app.config";
 import { asyncHandler } from "../middlewares/asyncHandler.middleware";
-import { Request, Response } from "express";
+import { NextFunction, Request, Response } from "express";
 import { registerSchema } from "../validation/auth.validation"
 import { HTTPSTATUS } from "../config/http.config";
 import { registerService } from "../services/auth.service";
+import { verifyUserService } from "../services/auth.service";
+import passport from "passport";
 
 export const googleLoginCallback = asyncHandler(
     async (req: Request, res: Response) => { 
@@ -30,5 +32,29 @@ export const register = asyncHandler(
         return res.status(HTTPSTATUS.CREATED).json({
             message: "User registered successfully",
         });
+    }
+);
+
+export const login = asyncHandler(
+    async (req: Request, res: Response, next: NextFunction) => {
+        passport.authenticate("local", async (err: any, user: any, info: any) => {
+            if (err) {
+                return next(err);
+            }
+            if (!user) {
+                return res.status(HTTPSTATUS.UNAUTHORIZED).json({
+                    message: info?.message || "Invalid email or password",
+                });
+            }
+            req.logIn(user, (err) => {
+                if (err) {
+                    return next(err);
+                }
+                return res.json({
+                    message: "Login successful",
+                    user,
+                });
+            });
+         })(req, res, next);
     }
 );
