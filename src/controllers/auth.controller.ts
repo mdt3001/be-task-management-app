@@ -4,7 +4,6 @@ import { NextFunction, Request, Response } from "express";
 import { registerSchema } from "../validation/auth.validation"
 import { HTTPSTATUS } from "../config/http.config";
 import { registerService } from "../services/auth.service";
-import { verifyUserService } from "../services/auth.service";
 import passport from "passport";
 
 export const googleLoginCallback = asyncHandler(
