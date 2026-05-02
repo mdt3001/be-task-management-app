@@ -63,17 +63,13 @@ export const logout = asyncHandler(
         return new Promise<void>((resolve, reject) => {
             req.logout((err) => {
                 if (err) {
-                    return res.status(HTTPSTATUS.INTERNAL_SERVER_ERROR).json({
-                        message: "Logout failed",
-                    });
+                    return reject(err);
                 }
             
                 if (req.session) {
                     req.session.destroy((err) => {
                         if (err) {
-                            return res.status(HTTPSTATUS.INTERNAL_SERVER_ERROR).json({
-                                message: "Logout failed",
-                            });
+                            return reject(err);
                         }
                         res.json({
                             message: "Logout successful",
