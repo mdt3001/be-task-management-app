@@ -3,6 +3,6 @@ import { createWorkspaceController } from '../controllers/workspace.controller';
 
 const workspaceRoutes = Router();
 
-workspaceRoutes.post('/create/new', createWorkspaceController);
+workspaceRoutes.post('/', createWorkspaceController);
 
 export default workspaceRoutes;
