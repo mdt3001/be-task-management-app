@@ -36,3 +36,9 @@ export class BadRequestException extends AppError {
         super(message, HTTPSTATUS.BAD_REQUEST, errorCode || ErrorCodeEnum.VALIDATION_ERROR);
     }   
 }
+
+export class ForbiddenException extends AppError {
+    constructor(message = 'Forbidden', errorCode?: ErrorCodeEnumType) {
+        super(message, HTTPSTATUS.FORBIDDEN, errorCode || ErrorCodeEnum.ACCESS_FORBIDDEN);
+    }
+}
