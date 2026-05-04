@@ -14,6 +14,7 @@ import authRoutes from "./routes/auth.route";
 import MongoStore from "connect-mongo";
 import workspaceRoutes from "./routes/workspace.route";
 import { isAuthenticated } from "./middlewares/isAuthenticated.middleware";
+import memberRoutes from "./routes/member.route";
 const app = express();
 const BASE_PATH = config.BASE_PATH;
 
@@ -58,6 +59,7 @@ app.get('/', asyncHandler(async (req: Request, res: Response, next: NextFunction
 
 app.use(`${BASE_PATH}/auth`, authRoutes);
 app.use(`${BASE_PATH}/workspaces`, isAuthenticated, workspaceRoutes);
+app.use(`${BASE_PATH}/members`, isAuthenticated, memberRoutes);
 
 app.use(errorHandler);
 
