@@ -31,5 +31,5 @@ export const joinWorkspaceByInviteService = async (userId: string, inviteCode: s
 
     await newMember.save();
 
-    return { workspaceId: workspace._id, role: "member" };
+    return { workspaceId: workspace._id, role: role.name };
 };

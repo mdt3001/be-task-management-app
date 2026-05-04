@@ -2,6 +2,7 @@ import { asyncHandler } from "../middlewares/asyncHandler.middleware";
 import { Request, Response } from "express";
 import { z } from "zod";
 import { joinWorkspaceByInviteService } from "../services/member.service";
+import { HTTPSTATUS } from "../config/http.config";
 
 export const joinWorkspaceController = asyncHandler(
     async (req: Request, res: Response) => {
@@ -10,7 +11,7 @@ export const joinWorkspaceController = asyncHandler(
 
         const { workspaceId, role } = await joinWorkspaceByInviteService(userId, inviteCode);
 
-        return res.status(200).json({
+        return res.status(HTTPSTATUS.OK).json({
             message: "Successfully joined workspace",
             workspaceId,
             role

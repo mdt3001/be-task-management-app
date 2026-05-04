@@ -1,4 +1,4 @@
-import { changeMemberRoleSchema } from './../validation/workspace.validation';
+import { changeMemberRoleSchema, updateWorkspaceSchema } from './../validation/workspace.validation';
 import { asyncHandler } from "../middlewares/asyncHandler.middleware";
 import { createWorkspaceSchema, getWorkspaceByIdSchema } from "../validation/workspace.validation";
 import { HTTPSTATUS } from '../config/http.config';
@@ -99,7 +99,7 @@ export const changeWorkspaceMemberRoleController = asyncHandler(
 export const updateWorkspaceByIdController = asyncHandler(
     async (req: Request, res: Response) => {
         const workspaceId = getWorkspaceByIdSchema.parse(req.params.id);
-        const { name, description } = req.body;
+        const { name, description } = updateWorkspaceSchema.parse(req.body);
         const userId = req.user?._id;
         const { role } = await getMemberRoleInWorkspace(userId, workspaceId);
         roleGuard(role, [PermissionsEnum.EDIT_WORKSPACE]);

@@ -14,6 +14,8 @@ export const ErrorCodeEnum = {
     RESOURCE_NOT_FOUND: 'RESOURCE_NOT_FOUND',
 
     INTERNAL_SERVER_ERROR: 'INTERNAL_SERVER_ERROR',
+
+    ACCESS_FORBIDDEN: 'ACCESS_FORBIDDEN',
 } as const;
 
 export type ErrorCodeEnumType = typeof ErrorCodeEnum[keyof typeof ErrorCodeEnum];

@@ -5,7 +5,7 @@ import MemberModel from "../models/member.model";
 import RoleModel from "../models/role.model";
 import UserModel from "../models/user.model";
 import WorkspaceModel from "../models/workspace.model";
-import { NotFoundException } from "../utils/appError";
+import { ForbiddenException, NotFoundException } from "../utils/appError";
 import TaskModel from '../models/task.model';
 import { TaskStatusEnum } from '../enums/task.enum';
 import ProjectModel from '../models/project.model';
@@ -159,7 +159,7 @@ export const changeWorkspaceMemberRoleService = async (workspaceId: string, memb
     return { member };
 }
 
-export const updateWorkspaceByIdService = async (workspaceId: string, body: { name?: string; description?: string }) => {
+export const updateWorkspaceByIdService = async (workspaceId: string, body: { name?: string; description?: string | undefined }) => {
     const { name, description } = body;
     const workspace = await WorkspaceModel.findById(workspaceId);
     if (!workspace) {
@@ -197,6 +197,11 @@ export const leaveWorkspaceService = async (userId: string, workspaceId: string)
         }
 
         const ownerRole = await RoleModel.findOne({ name: RolesEnum.OWNER }).session(session);
+
+        if (!ownerRole) {
+            throw new NotFoundException("Owner role not found");
+        }
+
         const ownerCount = await MemberModel.countDocuments({ 
             workspaceId: workspaceId, 
             role: ownerRole?._id 
@@ -239,14 +244,19 @@ export const deleteWorkspaceService = async (userId: string, workspaceId: string
 
         // Check if user is owner
         const ownerRole = await RoleModel.findOne({ name: RolesEnum.OWNER }).session(session);
+
+        if (!ownerRole) {
+            throw new NotFoundException("Owner role not found");
+        }
+
         const userMember = await MemberModel.findOne({ 
             userId: userId, 
             workspaceId: workspaceId,
-            role: ownerRole?._id
+            role: ownerRole._id
         }).session(session);
 
         if (!userMember) {
-            throw new Error("Only workspace owner can delete workspace");
+            throw new ForbiddenException("Only workspace owner can delete workspace");
         }
 
         //Delete all projects in workspace
@@ -256,7 +266,7 @@ export const deleteWorkspaceService = async (userId: string, workspaceId: string
         await TaskModel.deleteMany({ workspace: workspaceId }).session(session);
 
         // Delete all members in workspace
-        await MemberModel.deleteMany({ workspace: workspaceId }).session(session);
+        await MemberModel.deleteMany({ workspaceId: workspaceId }).session(session);
 
         // Reset currentWorkspace for all users in this workspace
         await UserModel.updateMany(
