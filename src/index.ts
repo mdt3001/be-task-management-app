@@ -15,6 +15,7 @@ import MongoStore from "connect-mongo";
 import workspaceRoutes from "./routes/workspace.route";
 import { isAuthenticated } from "./middlewares/isAuthenticated.middleware";
 import memberRoutes from "./routes/member.route";
+import { projectDetailRoutes, workspaceProjectRoutes } from "./routes/project.route";
 const app = express();
 const BASE_PATH = config.BASE_PATH;
 
@@ -58,7 +59,9 @@ app.get('/', asyncHandler(async (req: Request, res: Response, next: NextFunction
 }));
 
 app.use(`${BASE_PATH}/auth`, authRoutes);
+app.use(`${BASE_PATH}/workspaces`, isAuthenticated, workspaceProjectRoutes);
 app.use(`${BASE_PATH}/workspaces`, isAuthenticated, workspaceRoutes);
+app.use(`${BASE_PATH}/projects`, isAuthenticated, projectDetailRoutes);
 app.use(`${BASE_PATH}/members`, isAuthenticated, memberRoutes);
 
 app.use(errorHandler);
