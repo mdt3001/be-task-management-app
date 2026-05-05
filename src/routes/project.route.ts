@@ -14,10 +14,6 @@ export const workspaceProjectRoutes = Router();
 workspaceProjectRoutes.get("/:workspaceId/projects/analytics", getProjectAnalyticsController);
 workspaceProjectRoutes.get("/:workspaceId/projects", listProjectsController);
 workspaceProjectRoutes.post("/:workspaceId/projects", createProjectController);
-
-/** Mounted at `/projects` */
-export const projectDetailRoutes = Router();
-
-projectDetailRoutes.get("/:projectId", getProjectByIdController);
-projectDetailRoutes.put("/:projectId", updateProjectController);
-projectDetailRoutes.delete("/:projectId", deleteProjectController);
+workspaceProjectRoutes.get("/:workspaceId/projects/:projectId", getProjectByIdController);
+workspaceProjectRoutes.put("/:workspaceId/projects/:projectId", updateProjectController);
+workspaceProjectRoutes.delete("/:workspaceId/projects/:projectId", deleteProjectController);

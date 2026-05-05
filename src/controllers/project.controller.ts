@@ -24,6 +24,8 @@ export const createProjectController = asyncHandler(async (req: Request, res: Re
     const workspaceId = workspaceIdParamSchema.parse(req.params.workspaceId);
     const userId = req.user?._id;
     const body = createProjectSchema.parse(req.body);
+    const { role } = await getMemberRoleInWorkspace(String(userId), workspaceId);
+    roleGuard(role, [PermissionsEnum.CREATE_PROJECT]);
     const { project } = await createProjectService(String(userId), workspaceId, body);
 
     return res.status(HTTPSTATUS.CREATED).json({
@@ -62,7 +64,11 @@ export const getProjectAnalyticsController = asyncHandler(async (req: Request, r
 
 export const getProjectByIdController = asyncHandler(async (req: Request, res: Response) => {
     const projectId = projectIdParamSchema.parse(req.params.projectId);
+    const workspaceId = workspaceIdParamSchema.parse(req.params.workspaceId);
+    const { role } = await getMemberRoleInWorkspace(String(req.user?._id), workspaceId);
+    roleGuard(role, [PermissionsEnum.VIEW_ONLY]);
     const userId = req.user?._id;
+
 
     const { project } = await getProjectByIdService(String(userId), projectId);
 
@@ -76,6 +82,9 @@ export const updateProjectController = asyncHandler(async (req: Request, res: Re
     const projectId = projectIdParamSchema.parse(req.params.projectId);
     const userId = req.user?._id;
     const body = updateProjectSchema.parse(req.body);
+    const workspaceId = workspaceIdParamSchema.parse(req.params.workspaceId);
+    const { role } = await getMemberRoleInWorkspace(String(userId), workspaceId);
+    roleGuard(role, [PermissionsEnum.EDIT_PROJECT]);
     const { project } = await updateProjectService(String(userId), projectId, body);
 
     return res.status(HTTPSTATUS.OK).json({
@@ -87,7 +96,9 @@ export const updateProjectController = asyncHandler(async (req: Request, res: Re
 export const deleteProjectController = asyncHandler(async (req: Request, res: Response) => {
     const projectId = projectIdParamSchema.parse(req.params.projectId);
     const userId = req.user?._id;
-
+    const workspaceId = workspaceIdParamSchema.parse(req.params.workspaceId);
+    const { role } = await getMemberRoleInWorkspace(String(userId), workspaceId);
+    roleGuard(role, [PermissionsEnum.DELETE_PROJECT]);
     const result = await softDeleteProjectService(String(userId), projectId);
 
     return res.status(HTTPSTATUS.OK).json(result);
