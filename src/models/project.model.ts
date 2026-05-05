@@ -9,6 +9,8 @@ export interface Project {
     workspace: mongoose.Types.ObjectId;
     status: ProjectStatusEnumType;
     archivedAt?: Date | null;
+    startDate?: Date | null;
+    endDate?: Date | null;
     createdAt: Date;
     createdBy: mongoose.Types.ObjectId;
     updatedAt: Date;
@@ -25,6 +27,8 @@ const projectSchema = new mongoose.Schema<ProjectDocument>(
         workspace: { type: mongoose.Schema.Types.ObjectId, ref: "Workspace", required: true },
         status: { type: String, enum: Object.values(ProjectStatusEnum), default: ProjectStatusEnum.ACTIVE },
         archivedAt: { type: Date, default: null },
+        startDate: { type: Date, default: null },
+        endDate: { type: Date, default: null },
         createdBy: { type: mongoose.Schema.Types.ObjectId, ref: "User", required: true },
     },
     {
