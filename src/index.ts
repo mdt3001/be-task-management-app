@@ -16,6 +16,7 @@ import workspaceRoutes from "./routes/workspace.route";
 import { isAuthenticated } from "./middlewares/isAuthenticated.middleware";
 import memberRoutes from "./routes/member.route";
 import { workspaceProjectRoutes } from "./routes/project.route";
+import { projectTaskRoutes, taskRoutes } from "./routes/task.route";
 const app = express();
 const BASE_PATH = config.BASE_PATH;
 
@@ -62,6 +63,8 @@ app.use(`${BASE_PATH}/auth`, authRoutes);
 app.use(`${BASE_PATH}/workspaces`, isAuthenticated, workspaceProjectRoutes);
 app.use(`${BASE_PATH}/workspaces`, isAuthenticated, workspaceRoutes);
 app.use(`${BASE_PATH}/members`, isAuthenticated, memberRoutes);
+app.use(`${BASE_PATH}`, isAuthenticated, projectTaskRoutes);
+app.use(`${BASE_PATH}`, isAuthenticated, taskRoutes);
 
 app.use(errorHandler);
 
