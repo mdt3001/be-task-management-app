@@ -1,7 +1,7 @@
 import mongoose from "mongoose";
 import TaskModel, { TaskDocument } from "../models/task.model";
 import ProjectModel from "../models/project.model";
-import { ForbiddenException, NotFoundException } from "../utils/appError";
+import { BadRequestException, ForbiddenException, NotFoundException } from "../utils/appError";
 import { getMemberRoleInWorkspace } from "./workspace.service";
 import { RolesEnum } from "../enums/role.enum";
 import { TaskPriorityEnum, TaskStatusEnum } from "../enums/task.enum";
@@ -13,6 +13,28 @@ const isTaskAssignee = (userId: string, task: TaskDocument) =>
 
 const isWorkspaceAdminOrOwner = (roleName: string) =>
     roleName === RolesEnum.ADMIN || roleName === RolesEnum.OWNER;
+
+const escapeRegex = (value: string) => value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+
+function mapTaskForFe<T extends { assignedTo?: unknown }>(task: T): T {
+    const assigned = task.assignedTo as { _id?: unknown; name?: string; avatar?: string | null } | null | undefined;
+    if (!assigned || typeof assigned !== "object") {
+        return task;
+    }
+    const { avatar, ...rest } = assigned as { _id?: unknown; name?: string; avatar?: string | null;[k: string]: unknown };
+    return {
+        ...task,
+        assignedTo: {
+            ...rest,
+            profilePicture: avatar ?? null,
+        },
+    } as T;
+}
+
+function normalizeDoc<T extends { assignedTo?: unknown }>(task: T | null | undefined): T | null | undefined {
+    if (!task) return task;
+    return mapTaskForFe(task);
+}
 
 export const getTaskByIdOrThrow = async (taskId: string) => {
     const task = await TaskModel.findById(taskId);
@@ -26,6 +48,14 @@ export const getProjectByIdOrThrow = async (projectId: string) => {
     const project = await ProjectModel.findById(projectId);
     if (!project) {
         throw new NotFoundException("Project not found");
+    }
+    return project;
+};
+
+export const assertProjectBelongsToWorkspace = async (projectId: string, workspaceId: string) => {
+    const project = await getProjectByIdOrThrow(projectId);
+    if (project.workspace.toString() !== workspaceId) {
+        throw new BadRequestException("Project does not belong to this workspace");
     }
     return project;
 };
@@ -54,20 +84,22 @@ export const assertTaskDeleteAccess = async (userId: string, task: TaskDocument)
     throw new ForbiddenException("Only the task creator or workspace admin can delete this task");
 };
 
+type CreateTaskBody = {
+    title: string;
+    description?: string | undefined;
+    status: typeof TaskStatusEnum[keyof typeof TaskStatusEnum];
+    priority: typeof TaskPriorityEnum[keyof typeof TaskPriorityEnum];
+    dueDate: Date;
+    assignedTo: string;
+};
+
 export const createTaskService = async (
     userId: string,
+    workspaceId: string,
     projectId: string,
-    body: {
-        title: string;
-        description?: string | undefined;
-        status?: typeof TaskStatusEnum.BACKLOG | typeof TaskStatusEnum.TODO | typeof TaskStatusEnum.IN_PROGRESS | typeof TaskStatusEnum.DONE | undefined;
-        priority?: typeof TaskPriorityEnum.LOW | typeof TaskPriorityEnum.MEDIUM | typeof TaskPriorityEnum.HIGH | undefined;
-        dueDate?: Date | undefined;
-        assigneeId?: string | undefined;
-    }
+    body: CreateTaskBody
 ) => {
-    const project = await getProjectByIdOrThrow(projectId);
-    const workspaceId = project.workspace.toString();
+    await assertProjectBelongsToWorkspace(projectId, workspaceId);
     await assertTaskWorkspaceMember(userId, workspaceId);
 
     const task = await TaskModel.create({
@@ -77,32 +109,43 @@ export const createTaskService = async (
         workspace: workspaceId,
         status: body.status ?? TaskStatusEnum.BACKLOG,
         priority: body.priority ?? TaskPriorityEnum.MEDIUM,
-        assignedTo: body.assigneeId ?? undefined,
+        assignedTo: body.assignedTo,
         createdBy: userId,
         dueDate: body.dueDate,
     });
 
     const populatedTask = await TaskModel.findById(task._id)
         .populate("createdBy", "name email avatar")
-        .populate("assignedTo", "name email avatar");
+        .populate("assignedTo", "name email avatar")
+        .populate("project", "_id emoji name");
 
-    return { task: populatedTask ?? task };
+    const shaped = normalizeDoc(populatedTask ?? task);
+    return { task: shaped! };
+};
+
+type UpdateTaskBody = {
+    title?: string | undefined;
+    description?: string | undefined;
+    status?: typeof TaskStatusEnum[keyof typeof TaskStatusEnum] | undefined;
+    priority?: typeof TaskPriorityEnum[keyof typeof TaskPriorityEnum] | undefined;
+    dueDate?: Date | undefined;
+    assignedTo?: string | null | undefined;
 };
 
 export const updateTaskService = async (
     userId: string,
+    workspaceId: string,
+    projectId: string,
     taskId: string,
-    body: {
-        title?: string | undefined;
-        description?: string | undefined;
-        status?: typeof TaskStatusEnum.BACKLOG | typeof TaskStatusEnum.TODO | typeof TaskStatusEnum.IN_PROGRESS | typeof TaskStatusEnum.DONE | undefined;
-        priority?: typeof TaskPriorityEnum.LOW | typeof TaskPriorityEnum.MEDIUM | typeof TaskPriorityEnum.HIGH | undefined;
-        dueDate?: Date | null | undefined;
-        assigneeId?: string | null | undefined;
-    }
+    body: UpdateTaskBody
 ) => {
     const task = await getTaskByIdOrThrow(taskId);
-    await assertTaskUpdateAccess(userId, task);
+    if (task.workspace.toString() !== workspaceId) {
+        throw new BadRequestException("Task does not belong to this workspace");
+    }
+    if (task.project.toString() !== projectId) {
+        throw new BadRequestException("Task does not belong to this project");
+    }
 
     if (body.title !== undefined) {
         task.title = body.title;
@@ -117,94 +160,102 @@ export const updateTaskService = async (
         task.priority = body.priority;
     }
     if (body.dueDate !== undefined) {
-        task.dueDate = (body.dueDate ?? undefined) as any;
+        task.dueDate = body.dueDate ?? undefined as any;
     }
-    if (body.assigneeId !== undefined) {
-        task.assignedTo = body.assigneeId ? new mongoose.Types.ObjectId(body.assigneeId) : (undefined as any);
+    if (body.assignedTo !== undefined) {
+        task.assignedTo = body.assignedTo ? new mongoose.Types.ObjectId(body.assignedTo) : (undefined as any);
     }
 
     await task.save();
 
     const updatedTask = await TaskModel.findById(task._id)
         .populate("createdBy", "name email avatar")
-        .populate("assignedTo", "name email avatar");
+        .populate("assignedTo", "name email avatar")
+        .populate("project", "_id emoji name");
 
-    return { task: updatedTask ?? task };
+    const shaped = normalizeDoc(updatedTask ?? task);
+    return { task: shaped! };
 };
 
-export const listTasksByProjectService = async (
-    userId: string,
-    projectId: string,
-    query: {
-        page: number;
-        limit: number;
-        status?: typeof TaskStatusEnum.BACKLOG | typeof TaskStatusEnum.TODO | typeof TaskStatusEnum.IN_PROGRESS | typeof TaskStatusEnum.DONE | undefined;
-        priority?: typeof TaskPriorityEnum.LOW | typeof TaskPriorityEnum.MEDIUM | typeof TaskPriorityEnum.HIGH | undefined;
-        assigneeId?: string | undefined;
-    }
-) => {
-    const project = await getProjectByIdOrThrow(projectId);
-    const workspaceId = project.workspace.toString();
+type ListWorkspaceTasksQuery = {
+    pageNumber: number;
+    pageSize: number;
+    keyword?: string | undefined;
+    projectId?: string | undefined;
+    assignedTo?: string | undefined;
+    status?: typeof TaskStatusEnum[keyof typeof TaskStatusEnum] | undefined;
+    priority?: typeof TaskPriorityEnum[keyof typeof TaskPriorityEnum] | undefined;
+    dueDate?: string | undefined;
+};
+
+export const listAllTasksInWorkspaceService = async (userId: string, workspaceId: string, query: ListWorkspaceTasksQuery) => {
     await assertTaskWorkspaceMember(userId, workspaceId);
 
-    const filter: mongoose.FilterQuery<TaskDocument> = { project: projectId };
+    const filter: mongoose.FilterQuery<TaskDocument> = { workspace: workspaceId };
+    if (query.projectId) {
+        filter.project = query.projectId;
+    }
     if (query.status) {
         filter.status = query.status;
     }
     if (query.priority) {
         filter.priority = query.priority;
     }
-    if (query.assigneeId) {
-        filter.assignedTo = query.assigneeId;
+    if (query.assignedTo) {
+        filter.assignedTo = query.assignedTo;
+    }
+    if (query.keyword?.trim()) {
+        const kw = escapeRegex(query.keyword.trim());
+        filter.$or = [
+            { title: { $regex: kw, $options: "i" } },
+            { description: { $regex: kw, $options: "i" } },
+        ];
+    }
+    if (query.dueDate) {
+        const d = new Date(query.dueDate);
+        if (!Number.isNaN(d.getTime())) {
+            const start = new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate(), 0, 0, 0, 0));
+            const end = new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate(), 23, 59, 59, 999));
+            filter.dueDate = { $gte: start, $lte: end };
+        }
     }
 
-    const skip = (query.page - 1) * query.limit;
-    const [tasks, total] = await Promise.all([
+    const skip = (query.pageNumber - 1) * query.pageSize;
+    const limit = query.pageSize;
+
+    const [tasksRaw, total] = await Promise.all([
         TaskModel.find(filter)
             .sort({ updatedAt: -1 })
             .skip(skip)
-            .limit(query.limit)
+            .limit(limit)
             .populate("createdBy", "name email avatar")
             .populate("assignedTo", "name email avatar")
+            .populate("project", "_id emoji name")
             .lean(),
         TaskModel.countDocuments(filter),
     ]);
 
-    const totalPages = Math.max(1, Math.ceil(total / query.limit));
+    const tasks = tasksRaw.map((t) => mapTaskForFe(t));
+    const totalPages = Math.max(1, Math.ceil(total / limit));
 
     return {
         tasks,
         pagination: {
-            page: query.page,
-            limit: query.limit,
-            total,
+            totalCount: total,
+            pageSize: limit,
+            pageNumber: query.pageNumber,
             totalPages,
+            skip,
+            limit,
         },
     };
 };
 
-export const getTaskByIdService = async (userId: string, taskId: string) => {
-    const task = await TaskModel.findById(taskId)
-        .populate("createdBy", "name email avatar")
-        .populate("assignedTo", "name email avatar");
-
-    if (!task) {
-        throw new NotFoundException("Task not found");
-    }
-
-    await assertTaskReadAccess(userId, task);
-    return { task };
-};
-
-export const getTaskEnumsService = async () => {
-    return {
-        status: TaskStatusEnum,
-        priority: TaskPriorityEnum,
-    };
-};
-
-export const deleteTaskService = async (userId: string, taskId: string) => {
+export const deleteTaskService = async (userId: string, taskId: string, workspaceId: string) => {
     const task = await getTaskByIdOrThrow(taskId);
+    if (task.workspace.toString() !== workspaceId) {
+        throw new BadRequestException("Task does not belong to this workspace");
+    }
     await assertTaskDeleteAccess(userId, task);
 
     await TaskModel.findByIdAndDelete(taskId);
