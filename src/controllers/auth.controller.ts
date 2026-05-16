@@ -3,11 +3,13 @@ import { asyncHandler } from "../middlewares/asyncHandler.middleware";
 import { NextFunction, Request, Response } from "express";
 import { registerSchema } from "../validation/auth.validation"
 import { HTTPSTATUS } from "../config/http.config";
-import { registerService } from "../services/auth.service";
+import { getUserByIdService, registerService } from "../services/auth.service";
 import passport from "passport";
+import { UnauthorizedException } from "../utils/appError";
+import { ErrorCodeEnum } from "../enums/error-code.enum";
 
 export const googleLoginCallback = asyncHandler(
-    async (req: Request, res: Response) => { 
+    async (req: Request, res: Response) => {
         const currentWorkspace = req.user?.currentWorkspace;
         if (!currentWorkspace) {
             return res.redirect(`${config.FRONTEND_GOOGLE_CALLBACK_URL}?status=failure`);
@@ -18,16 +20,16 @@ export const googleLoginCallback = asyncHandler(
 );
 
 export const register = asyncHandler(
-    async (req: Request, res: Response) => { 
+    async (req: Request, res: Response) => {
         const validationResult = registerSchema.safeParse({ ...req.body });
-         if (!validationResult.success) {
-             return res.status(HTTPSTATUS.BAD_REQUEST).json({
-                 message: "Invalid registration payload",
-                 errors: validationResult.error.issues,
-             });
-         }
+        if (!validationResult.success) {
+            return res.status(HTTPSTATUS.BAD_REQUEST).json({
+                message: "Invalid registration payload",
+                errors: validationResult.error.issues,
+            });
+        }
         await registerService(validationResult.data);
-        
+
         return res.status(HTTPSTATUS.CREATED).json({
             message: "User registered successfully",
         });
@@ -54,7 +56,7 @@ export const login = asyncHandler(
                     user,
                 });
             });
-         })(req, res, next);
+        })(req, res, next);
     }
 );
 
@@ -65,7 +67,7 @@ export const logout = asyncHandler(
                 if (err) {
                     return reject(err);
                 }
-            
+
                 if (req.session) {
                     req.session.destroy((err) => {
                         if (err) {
@@ -83,6 +85,26 @@ export const logout = asyncHandler(
                     resolve();
                 }
             });
+        });
+    }
+);
+
+export const getCurrentUser = asyncHandler(
+    async (req: Request, res: Response) => {
+        const user = req.user;
+
+        if (!user) {
+            throw new UnauthorizedException(
+                "Not authenticated",
+                ErrorCodeEnum.AUTH_UNAUTHORIZED_ACCESS
+            );
+        }
+
+        const result = await getUserByIdService(user._id as string);
+
+        return res.status(HTTPSTATUS.OK).json({
+            message: "User profile retrieved successfully",
+            user: result,
         });
     }
 );

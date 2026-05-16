@@ -29,13 +29,13 @@ app.use(
     name: "session",
     secret: config.SESSION_SECRET,
     resave: false,
-      saveUninitialized: false,
-      store: config.NODE_ENV === "production"
-        ? (MongoStore.create({
-            mongoUrl: config.MONGO_URI,
-            collectionName: "sessions"
-        }))
-        : undefined,
+    saveUninitialized: false,
+    store: config.NODE_ENV === "production"
+      ? (MongoStore.create({
+        mongoUrl: config.MONGO_URI,
+        collectionName: "sessions"
+      }))
+      : undefined,
     cookie: {
       maxAge: 24 * 60 * 60 * 1000,
       secure: config.NODE_ENV === "production",
@@ -49,14 +49,14 @@ app.use(passport.initialize());
 app.use(passport.session());
 
 app.use(
-    cors({
-        origin: config.FRONTEND_ORIGIN,
-        credentials: true,
-    })
+  cors({
+    origin: config.FRONTEND_ORIGIN,
+    credentials: true,
+  })
 );
 
 app.get('/', asyncHandler(async (req: Request, res: Response, next: NextFunction) => {
-    throw new BadRequestException("This is a bad request example", ErrorCodeEnum.VALIDATION_ERROR);
+  throw new BadRequestException("This is a bad request example", ErrorCodeEnum.VALIDATION_ERROR);
 }));
 
 app.use(`${BASE_PATH}/auth`, authRoutes);
@@ -69,7 +69,7 @@ app.use(`${BASE_PATH}`, isAuthenticated, taskRoutes);
 app.use(errorHandler);
 
 
-app.listen(config.PORT, async() => {
-    console.log(`Server is running on port ${config.PORT}`);
-    await connectDB();
+app.listen(config.PORT, async () => {
+  console.log(`Server is running on port ${config.PORT}`);
+  await connectDB();
 });
