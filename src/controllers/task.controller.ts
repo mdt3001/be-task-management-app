@@ -5,33 +5,30 @@ import { PermissionsEnum } from "../enums/role.enum";
 import { roleGuard } from "../utils/roleGuard";
 import { getMemberRoleInWorkspace } from "../services/workspace.service";
 import {
+    allTasksInWorkspaceQuerySchema,
+    createTaskRouteParamsSchema,
     createTaskSchema,
-    listTasksQuerySchema,
-    projectIdParamSchema,
-    taskIdParamSchema,
+    deleteTaskRouteParamsSchema,
+    updateTaskRouteParamsSchema,
     updateTaskSchema,
+    workspaceTasksRouteParamsSchema,
 } from "../validation/task.validation";
 import {
     createTaskService,
     deleteTaskService,
-    getProjectByIdOrThrow,
-    getTaskByIdService,
-    getTaskByIdOrThrow,
-    getTaskEnumsService,
-    listTasksByProjectService,
+    listAllTasksInWorkspaceService,
     updateTaskService,
 } from "../services/task.service";
 
 export const createTaskController = asyncHandler(async (req: Request, res: Response) => {
-    const projectId = projectIdParamSchema.parse(req.params.projectId);
+    const { projectId, workspaceId } = createTaskRouteParamsSchema.parse(req.params);
     const userId = req.user?._id;
     const body = createTaskSchema.parse(req.body);
 
-    const project = await getProjectByIdOrThrow(projectId);
-    const { role } = await getMemberRoleInWorkspace(String(userId), project.workspace.toString());
+    const { role } = await getMemberRoleInWorkspace(String(userId), workspaceId);
     roleGuard(role, [PermissionsEnum.CREATE_TASK]);
 
-    const { task } = await createTaskService(String(userId), projectId, body);
+    const { task } = await createTaskService(String(userId), workspaceId, projectId, body);
 
     return res.status(HTTPSTATUS.CREATED).json({
         message: "Task created successfully",
@@ -40,15 +37,14 @@ export const createTaskController = asyncHandler(async (req: Request, res: Respo
 });
 
 export const updateTaskController = asyncHandler(async (req: Request, res: Response) => {
-    const taskId = taskIdParamSchema.parse(req.params.taskId);
+    const { taskId, projectId, workspaceId } = updateTaskRouteParamsSchema.parse(req.params);
     const userId = req.user?._id;
     const body = updateTaskSchema.parse(req.body);
 
-    const task = await getTaskByIdOrThrow(taskId);
-    const { role } = await getMemberRoleInWorkspace(String(userId), task.workspace.toString());
+    const { role } = await getMemberRoleInWorkspace(String(userId), workspaceId);
     roleGuard(role, [PermissionsEnum.EDIT_TASK]);
 
-    const { task: updatedTask } = await updateTaskService(String(userId), taskId, body);
+    const { task: updatedTask } = await updateTaskService(String(userId), workspaceId, projectId, taskId, body);
 
     return res.status(HTTPSTATUS.OK).json({
         message: "Task updated successfully",
@@ -56,12 +52,12 @@ export const updateTaskController = asyncHandler(async (req: Request, res: Respo
     });
 });
 
-export const listTasksByProjectController = asyncHandler(async (req: Request, res: Response) => {
-    const projectId = projectIdParamSchema.parse(req.params.projectId);
+export const listAllTasksInWorkspaceController = asyncHandler(async (req: Request, res: Response) => {
+    const { workspaceId } = workspaceTasksRouteParamsSchema.parse(req.params);
     const userId = req.user?._id;
-    const query = listTasksQuerySchema.parse(req.query);
+    const query = allTasksInWorkspaceQuerySchema.parse(req.query);
 
-    const { tasks, pagination } = await listTasksByProjectService(String(userId), projectId, query);
+    const { tasks, pagination } = await listAllTasksInWorkspaceService(String(userId), workspaceId, query);
 
     return res.status(HTTPSTATUS.OK).json({
         message: "Tasks retrieved successfully",
@@ -70,32 +66,13 @@ export const listTasksByProjectController = asyncHandler(async (req: Request, re
     });
 });
 
-export const getTaskByIdController = asyncHandler(async (req: Request, res: Response) => {
-    const taskId = taskIdParamSchema.parse(req.params.taskId);
-    const userId = req.user?._id;
-
-    const { task } = await getTaskByIdService(String(userId), taskId);
-
-    return res.status(HTTPSTATUS.OK).json({
-        message: "Task retrieved successfully",
-        task,
-    });
-});
-
-export const getTaskEnumsController = asyncHandler(async (_req: Request, res: Response) => {
-    const enums = await getTaskEnumsService();
-
-    return res.status(HTTPSTATUS.OK).json(enums);
-});
-
 export const deleteTaskController = asyncHandler(async (req: Request, res: Response) => {
-    const taskId = taskIdParamSchema.parse(req.params.taskId);
+    const { taskId, workspaceId } = deleteTaskRouteParamsSchema.parse(req.params);
     const userId = req.user?._id;
 
-    const task = await getTaskByIdOrThrow(taskId);
-    const { role } = await getMemberRoleInWorkspace(String(userId), task.workspace.toString());
+    const { role } = await getMemberRoleInWorkspace(String(userId), workspaceId);
     roleGuard(role, [PermissionsEnum.DELETE_TASK]);
 
-    const result = await deleteTaskService(String(userId), taskId);
+    const result = await deleteTaskService(String(userId), taskId, workspaceId);
     return res.status(HTTPSTATUS.OK).json(result);
 });

@@ -217,8 +217,11 @@ export const leaveWorkspaceService = async (userId: string, workspaceId: string)
         // If user has currentWorkspace set to this workspace, reset it
         const user = await UserModel.findById(userId).session(session);
         if (user && user.currentWorkspace?.toString() === workspaceId) {
-            user.currentWorkspace = null;
-            await user.save({ session });
+            await UserModel.updateOne(
+                { _id: user._id },
+                { $unset: { currentWorkspace: "" } },
+                { session }
+            );
         }
 
         await session.commitTransaction();
@@ -268,10 +271,10 @@ export const deleteWorkspaceService = async (userId: string, workspaceId: string
         // Delete all members in workspace
         await MemberModel.deleteMany({ workspaceId: workspaceId }).session(session);
 
-        // Reset currentWorkspace for all users in this workspace
+        // Remove `currentWorkspace` field for all users in this workspace
         await UserModel.updateMany(
             { currentWorkspace: workspaceId },
-            { currentWorkspace: null },
+            { $unset: { currentWorkspace: "" } },
             { session }
         );
 
