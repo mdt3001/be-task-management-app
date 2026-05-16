@@ -167,7 +167,10 @@ export const registerService = async (data: {
 };
 
 export const getUserByIdService = async (userId: string) => {
-    const user = await UserModel.findById(userId);
+    const user = await UserModel.findById(userId)
+        .populate("currentWorkspace")
+        .exec();
+        
     if (!user) {
         throw new NotFoundException(
             "User not found",

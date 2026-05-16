@@ -9,7 +9,7 @@ const authRoutes = Router();
 authRoutes.post("/register", register);
 authRoutes.post("/login", login);
 authRoutes.post("/logout", logout);
-authRoutes.get("/users/me", getCurrentUser);
+authRoutes.get("/users/current", getCurrentUser);
 
 authRoutes.get(
     "/google",
