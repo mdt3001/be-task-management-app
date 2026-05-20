@@ -55,6 +55,7 @@ export const updateTaskController = asyncHandler(async (req: Request, res: Respo
 export const listAllTasksInWorkspaceController = asyncHandler(async (req: Request, res: Response) => {
     const { workspaceId } = workspaceTasksRouteParamsSchema.parse(req.params);
     const userId = req.user?._id;
+    // Dữ liệu query giờ đã được validate trơn tru qua schema mới
     const query = allTasksInWorkspaceQuerySchema.parse(req.query);
 
     const { tasks, pagination } = await listAllTasksInWorkspaceService(String(userId), workspaceId, query);
