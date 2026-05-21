@@ -91,6 +91,7 @@ type CreateTaskBody = {
     priority: typeof TaskPriorityEnum[keyof typeof TaskPriorityEnum];
     dueDate: Date;
     assignedTo: string;
+    taskCode: string;
 };
 
 export const createTaskService = async (
@@ -112,6 +113,7 @@ export const createTaskService = async (
         assignedTo: body.assignedTo,
         createdBy: userId,
         dueDate: body.dueDate,
+        taskCode: body.taskCode,
     });
 
     const populatedTask = await TaskModel.findById(task._id)
@@ -183,8 +185,8 @@ type ListWorkspaceTasksQuery = {
     keyword?: string | undefined;
     projectId?: string | undefined;
     assignedTo?: string | undefined;
-    status?: typeof TaskStatusEnum[keyof typeof TaskStatusEnum] | undefined;
-    priority?: typeof TaskPriorityEnum[keyof typeof TaskPriorityEnum] | undefined;
+    status?: string | undefined;   // Đổi thành string để nhận chuỗi "TODO,IN_PROGRESS"
+    priority?: string | undefined; // Đổi thành string
     dueDate?: string | undefined;
 };
 
@@ -192,17 +194,26 @@ export const listAllTasksInWorkspaceService = async (userId: string, workspaceId
     await assertTaskWorkspaceMember(userId, workspaceId);
 
     const filter: mongoose.FilterQuery<TaskDocument> = { workspace: workspaceId };
+
+    // Hàm cắt chuỗi tiện ích
+    const parseFilter = (value: string | string[] | undefined) => {
+        if (!value) return undefined;
+        if (Array.isArray(value)) return value;
+        return value.split(',').map(v => v.trim()).filter(Boolean);
+    };
+
+    // Áp dụng lọc nhiều điều kiện
     if (query.projectId) {
-        filter.project = query.projectId;
+        filter.project = { $in: parseFilter(query.projectId) };
     }
     if (query.status) {
-        filter.status = query.status;
+        filter.status = { $in: parseFilter(query.status) };
     }
     if (query.priority) {
-        filter.priority = query.priority;
+        filter.priority = { $in: parseFilter(query.priority) };
     }
     if (query.assignedTo) {
-        filter.assignedTo = query.assignedTo;
+        filter.assignedTo = { $in: parseFilter(query.assignedTo) };
     }
     if (query.keyword?.trim()) {
         const kw = escapeRegex(query.keyword.trim());
@@ -211,6 +222,27 @@ export const listAllTasksInWorkspaceService = async (userId: string, workspaceId
             { description: { $regex: kw, $options: "i" } },
         ];
     }
+    if (query.dueDate) {
+        const d = new Date(query.dueDate);
+        if (!Number.isNaN(d.getTime())) {
+            const start = new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate(), 0, 0, 0, 0));
+            const end = new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate(), 23, 59, 59, 999));
+            filter.dueDate = { $gte: start, $lte: end };
+        }
+    }
+
+    const skip = (query.pageNumber - 1) * query.pageSize;
+    const limit = query.pageSize;
+
+    // Tìm kiếm theo từ khóa
+    if (query.keyword?.trim()) {
+        const kw = escapeRegex(query.keyword.trim());
+        filter.$or = [
+            { title: { $regex: kw, $options: "i" } },
+            { description: { $regex: kw, $options: "i" } },
+        ];
+    }
+
     if (query.dueDate) {
         const d = new Date(query.dueDate);
         if (!Number.isNaN(d.getTime())) {
