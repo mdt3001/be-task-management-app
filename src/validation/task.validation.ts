@@ -2,6 +2,24 @@ import { z } from "zod";
 import { TaskPriorityEnum, TaskStatusEnum } from "../enums/task.enum";
 import { descriptionSchema } from "./workspace.validation";
 
+export const tiptapDocSchema = z.object({
+    type: z.literal("doc"),
+    content: z.array(z.record(z.string(), z.unknown())),
+});
+
+const taskDescriptionSchema = z.union([z.string(), tiptapDocSchema]);
+
+const taskLabelSchema = z.object({
+    name: z.string().trim().min(1).max(64),
+    color: z.string().trim().min(1).max(32),
+});
+
+const taskSubtaskSchema = z.object({
+    _id: z.string().trim(),
+    title: z.string().trim().min(1).max(512),
+    completed: z.boolean(),
+});
+
 export const taskIdParamSchema = z.string().trim().min(1, "Task ID is required").max(255);
 export const projectIdParamSchema = z.string().trim().min(1, "Project ID is required").max(255);
 export const workspaceIdParamSchema = z.string().trim().min(1, "Workspace ID is required").max(255);
@@ -18,7 +36,7 @@ const taskPriorityZodEnum = z.enum([TaskPriorityEnum.LOW, TaskPriorityEnum.MEDIU
 
 export const createTaskSchema = z.object({
     title: z.string().trim().min(1, "Title is required").max(255),
-    description: descriptionSchema,
+    description: taskDescriptionSchema.optional(),
     status: taskStatusZodEnum,
     priority: taskPriorityZodEnum,
     dueDate: z.coerce.date().catch(new Date()),
@@ -27,11 +45,15 @@ export const createTaskSchema = z.object({
 
 export const updateTaskSchema = z.object({
     title: z.string().trim().min(1, "Title is required").max(255).optional(),
-    description: descriptionSchema.optional(),
+    description: taskDescriptionSchema.optional(),
     status: taskStatusZodEnum.optional(),
     priority: taskPriorityZodEnum.optional(),
-    dueDate: z.coerce.date().optional(),
+    dueDate: z.coerce.date().nullable().optional(),
+    startDate: z.coerce.date().nullable().optional(),
     assignedTo: z.string().trim().min(1).max(255).nullable().optional(),
+    parentTask: z.string().trim().min(1).max(255).nullable().optional(),
+    labels: z.array(taskLabelSchema).optional(),
+    subtasks: z.array(taskSubtaskSchema).optional(),
 });
 
 export const allTasksInWorkspaceQuerySchema = z.object({
@@ -63,4 +85,13 @@ export const deleteTaskRouteParamsSchema = z.object({
 
 export const workspaceTasksRouteParamsSchema = z.object({
     workspaceId: workspaceIdParamSchema,
+});
+
+export const getTaskRouteParamsSchema = z.object({
+    taskId: taskIdParamSchema,
+    workspaceId: workspaceIdParamSchema,
+});
+
+export const createTaskCommentSchema = z.object({
+    content: taskDescriptionSchema,
 });
