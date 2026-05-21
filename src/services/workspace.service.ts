@@ -79,7 +79,7 @@ export const getWorkspaceByIdService = async (workspaceId: string, userId: strin
     }
 
     const workspace = await WorkspaceModel.findById(workspaceId);
-    
+
     if (!workspace) {
         throw new NotFoundException("Workspace not found");
     }
@@ -107,7 +107,7 @@ export const getWorkspaceMembersService = async (workspaceId: string) => {
     const roles = await RoleModel.find({}, { name: 1, _id: 1 })
         .select("-permissions")
         .lean();
-    
+
     return { members, roles };
 }
 
@@ -117,7 +117,7 @@ export const getMemberRoleInWorkspace = async (userId: string, workspaceId: stri
     if (!member || !member.role || typeof member.role === "string" || !("name" in member.role)) {
         throw new NotFoundException("Member role not found");
     }
-    
+
     return { role: member.role.name };
 }
 
@@ -129,9 +129,9 @@ export const getWorkspaceAnalyticsService = async (workspaceId: string) => {
     }
 
     const currentDate = new Date();
-    const totalTasks = await TaskModel.countDocuments({ workspaceId: workspaceId });
-    const overdueTasks = await TaskModel.countDocuments({ workspaceId: workspaceId, dueDate: { $lt: currentDate }, status: { $ne: TaskStatusEnum.DONE } });
-    const completedTasks = await TaskModel.countDocuments({ workspaceId: workspaceId, status: TaskStatusEnum.DONE });
+    const totalTasks = await TaskModel.countDocuments({ workspace: workspaceId });
+    const overdueTasks = await TaskModel.countDocuments({ workspace: workspaceId, dueDate: { $lt: currentDate }, status: { $ne: TaskStatusEnum.DONE } });
+    const completedTasks = await TaskModel.countDocuments({ workspace: workspaceId, status: TaskStatusEnum.DONE });
     const analytics = {
         totalTasks,
         overdueTasks,
@@ -155,7 +155,7 @@ export const changeWorkspaceMemberRoleService = async (workspaceId: string, memb
     }
 
     member.role = newRole._id;
-    await member.save();        
+    await member.save();
     return { member };
 }
 
@@ -167,7 +167,7 @@ export const updateWorkspaceByIdService = async (workspaceId: string, body: { na
     }
 
     if (name) {
-        workspace.name = name ;
+        workspace.name = name;
     }
 
     if (description) {
@@ -180,7 +180,7 @@ export const updateWorkspaceByIdService = async (workspaceId: string, body: { na
 
 export const leaveWorkspaceService = async (userId: string, workspaceId: string) => {
     const session = await mongoose.startSession();
-    
+
     try {
         session.startTransaction();
 
@@ -202,9 +202,9 @@ export const leaveWorkspaceService = async (userId: string, workspaceId: string)
             throw new NotFoundException("Owner role not found");
         }
 
-        const ownerCount = await MemberModel.countDocuments({ 
-            workspaceId: workspaceId, 
-            role: ownerRole?._id 
+        const ownerCount = await MemberModel.countDocuments({
+            workspaceId: workspaceId,
+            role: ownerRole?._id
         }).session(session);
 
         if (member.role === ownerRole?._id && ownerCount === 1) {
@@ -236,7 +236,7 @@ export const leaveWorkspaceService = async (userId: string, workspaceId: string)
 
 export const deleteWorkspaceService = async (userId: string, workspaceId: string) => {
     const session = await mongoose.startSession();
-    
+
     try {
         session.startTransaction();
 
@@ -252,8 +252,8 @@ export const deleteWorkspaceService = async (userId: string, workspaceId: string
             throw new NotFoundException("Owner role not found");
         }
 
-        const userMember = await MemberModel.findOne({ 
-            userId: userId, 
+        const userMember = await MemberModel.findOne({
+            userId: userId,
             workspaceId: workspaceId,
             role: ownerRole._id
         }).session(session);
