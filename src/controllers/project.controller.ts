@@ -1,4 +1,4 @@
-import { Request, Response } from "express";
+import { NextFunction, Request, Response } from "express";
 import { asyncHandler } from "../middlewares/asyncHandler.middleware";
 import { HTTPSTATUS } from "../config/http.config";
 import {
@@ -12,6 +12,7 @@ import {
     createProjectService,
     getProjectAnalyticsService,
     getProjectByIdService,
+    getProjectTaskAnalyticsService_New,
     listProjectsInWorkspaceService,
     softDeleteProjectService,
     updateProjectService,
@@ -61,6 +62,26 @@ export const getProjectAnalyticsController = asyncHandler(async (req: Request, r
         analytics,
     });
 });
+
+export const getProjectTaskAnalyticsController_New = async (
+    req: Request,
+    res: Response,
+    next: NextFunction
+) => {
+    try {
+        const workspaceId = req.params.workspaceId as string;
+        const projectId = req.params.projectId as string;
+
+        const result = await getProjectTaskAnalyticsService_New(workspaceId, projectId);
+
+        return res.status(200).json({
+            message: "Project task analytics retrieved successfully",
+            ...result,
+        });
+    } catch (error) {
+        next(error);
+    }
+};
 
 export const getProjectByIdController = asyncHandler(async (req: Request, res: Response) => {
     const projectId = projectIdParamSchema.parse(req.params.projectId);

@@ -215,24 +215,6 @@ export const listAllTasksInWorkspaceService = async (userId: string, workspaceId
     if (query.assignedTo) {
         filter.assignedTo = { $in: parseFilter(query.assignedTo) };
     }
-    if (query.keyword?.trim()) {
-        const kw = escapeRegex(query.keyword.trim());
-        filter.$or = [
-            { title: { $regex: kw, $options: "i" } },
-            { description: { $regex: kw, $options: "i" } },
-        ];
-    }
-    if (query.dueDate) {
-        const d = new Date(query.dueDate);
-        if (!Number.isNaN(d.getTime())) {
-            const start = new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate(), 0, 0, 0, 0));
-            const end = new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate(), 23, 59, 59, 999));
-            filter.dueDate = { $gte: start, $lte: end };
-        }
-    }
-
-    const skip = (query.pageNumber - 1) * query.pageSize;
-    const limit = query.pageSize;
 
     // Tìm kiếm theo từ khóa
     if (query.keyword?.trim()) {
