@@ -6,6 +6,8 @@ import { RolesEnum } from "../enums/role.enum";
 import { ForbiddenException, NotFoundException } from "../utils/appError";
 import { generateUniqueProjectKey } from "../utils/projectKey.util";
 import { getMemberRoleInWorkspace } from "./workspace.service";
+import TaskModel from "../models/task.model";
+import { TaskStatusEnum } from "../enums/task.enum";
 
 const isProjectCreator = (userId: string, project: ProjectDocument) =>
     project.createdBy.toString() === userId;
@@ -119,7 +121,7 @@ export const softDeleteProjectService = async (userId: string, projectId: string
 export const listProjectsInWorkspaceService = async (
     workspaceId: string,
     userId: string,
-    query: { page: number; limit: number; status?: typeof ProjectStatusEnum.ACTIVE | typeof ProjectStatusEnum.ARCHIVED | undefined}
+    query: { page: number; limit: number; status?: typeof ProjectStatusEnum.ACTIVE | typeof ProjectStatusEnum.ARCHIVED | undefined }
 ) => {
     await assertWorkspaceMember(userId, workspaceId);
 
@@ -233,6 +235,77 @@ export const getProjectAnalyticsService = async (workspaceId: string) => {
             activeCount: totals.active,
             archivedCount: totals.archived,
             projectsCreatedPerMonth: perMonth,
+        },
+    };
+
+
+};
+
+export const getProjectTaskAnalyticsService_New = async (
+    workspaceId: string,
+    projectId: string
+) => {
+    // 1. Kiểm tra Workspace tồn tại
+    const workspace = await WorkspaceModel.findById(workspaceId);
+    if (!workspace) {
+        throw new NotFoundException("Workspace not found");
+    }
+
+    const wsObjectId = new mongoose.Types.ObjectId(workspaceId);
+    const projObjectId = new mongoose.Types.ObjectId(projectId);
+
+    // Lọc theo cả Workspace và đúng Project ID từ Frontend gửi lên
+    const match = {
+        workspace: wsObjectId,
+        project: projObjectId
+    };
+
+    const now = new Date();
+
+    // 2. Chạy Aggregation đếm dữ liệu Task
+    const [taskTotalsAgg] = await TaskModel.aggregate<{
+        total: number;
+        completed: number;
+        overdue: number;
+    }>([
+        { $match: match },
+        {
+            $group: {
+                _id: null,
+                // Tổng số task
+                total: { $sum: 1 },
+
+                completed: {
+                    $sum: {
+                        $cond: [{ $eq: ["$status", TaskStatusEnum.DONE] }, 1, 0]
+                    },
+                },
+
+                overdue: {
+                    $sum: {
+                        $cond: [
+                            {
+                                $and: [
+                                    { $lt: ["$dueDate", now] },
+                                    { $ne: ["$status", TaskStatusEnum.DONE] }
+                                ]
+                            },
+                            1,
+                            0
+                        ]
+                    }
+                },
+            },
+        },
+    ]);
+
+    const totals = taskTotalsAgg ?? { total: 0, completed: 0, overdue: 0 };
+
+    return {
+        analytics: {
+            totalTasks: totals.total,
+            overdueTasks: totals.overdue,
+            completedTasks: totals.completed,
         },
     };
 };
