@@ -8,6 +8,7 @@ import { getMemberRoleInWorkspace } from "./workspace.service";
 import { RolesEnum } from "../enums/role.enum";
 import { TaskPriorityEnum, TaskStatusEnum } from "../enums/task.enum";
 import { normalizeDescription, TiptapDocument } from "../utils/tiptap-doc.util";
+import { deleteAttachmentsForTaskService } from "./attachment.service";
 
 const isTaskCreator = (userId: string, task: TaskDocument) => task.createdBy.toString() === userId;
 
@@ -378,6 +379,9 @@ export const deleteTaskService = async (userId: string, taskId: string, workspac
     if (!isWorkspaceAdminOrOwner(role) && !isTaskCreator(userId, task)) {
         throw new ForbiddenException("Only the task creator or workspace admin can delete this task");
     }
+
+    // Delete all attachments from Cloudinary and soft delete them
+    await deleteAttachmentsForTaskService(taskId);
 
     await TaskModel.findByIdAndDelete(taskId);
     return { message: "Task deleted successfully" };

@@ -17,6 +17,9 @@ import { isAuthenticated } from "./middlewares/isAuthenticated.middleware";
 import memberRoutes from "./routes/member.route";
 import { workspaceProjectRoutes } from "./routes/project.route";
 import { taskRoutes } from "./routes/task.route";
+import { attachmentRoutes } from "./routes/attachment.route";
+import  connectCloudinary  from "./config/cloudinary.config";
+
 const app = express();
 const BASE_PATH = config.BASE_PATH;
 
@@ -64,6 +67,7 @@ app.use(`${BASE_PATH}/workspaces`, isAuthenticated, workspaceProjectRoutes);
 app.use(`${BASE_PATH}/workspaces`, isAuthenticated, workspaceRoutes);
 app.use(`${BASE_PATH}/members`, isAuthenticated, memberRoutes);
 app.use(`${BASE_PATH}`, isAuthenticated, taskRoutes);
+app.use(`${BASE_PATH}`, isAuthenticated, attachmentRoutes);
 
 app.use(errorHandler);
 
@@ -71,4 +75,5 @@ app.use(errorHandler);
 app.listen(config.PORT, async () => {
   console.log(`Server is running on port ${config.PORT}`);
   await connectDB();
+  await connectCloudinary();
 });

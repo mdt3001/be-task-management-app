@@ -29,6 +29,7 @@ export interface Task {
     subtasks: TaskSubtask[];
     dueDate?: Date | null;
     startDate?: Date | null;
+    attachmentCount?: number;
     createdAt: Date;
     updatedAt: Date;
 }
@@ -65,6 +66,7 @@ const taskSchema = new mongoose.Schema<TaskDocument>(
         parentTask: { type: Schema.Types.ObjectId, ref: "Task", default: null },
         labels: { type: [labelSchema], default: [] },
         subtasks: { type: [subtaskSchema], default: [] },
+        attachmentCount: { type: Number, default: 0 },
         dueDate: { type: Date },
         startDate: { type: Date },
     },
