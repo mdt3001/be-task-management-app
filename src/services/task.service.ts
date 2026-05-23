@@ -91,7 +91,6 @@ type CreateTaskBody = {
     priority: typeof TaskPriorityEnum[keyof typeof TaskPriorityEnum];
     dueDate: Date;
     assignedTo: string;
-    taskCode: string;
 };
 
 export const createTaskService = async (
@@ -100,9 +99,22 @@ export const createTaskService = async (
     projectId: string,
     body: CreateTaskBody
 ) => {
-    await assertProjectBelongsToWorkspace(projectId, workspaceId);
+    // 1. Kiểm tra quyền và project thuộc workspace
+    const project = await assertProjectBelongsToWorkspace(projectId, workspaceId);
     await assertTaskWorkspaceMember(userId, workspaceId);
 
+    // 2. ĐẾM TỔNG SỐ TASK ĐANG CÓ TRONG PROJECT NÀY
+    const totalTasks = await TaskModel.countDocuments({
+        project: projectId,
+        workspace: workspaceId
+    });
+
+    // 3. TẠO TASK CODE THEO CÔNG THỨC: Số lượng hiện tại + 1
+    const projectKey = (project as any).key || "TASK";
+    const nextTaskNumber = totalTasks + 1;
+    const generatedTaskCode = `${projectKey}-${nextTaskNumber}`;
+
+    // 4. Khởi tạo Task vào DB
     const task = await TaskModel.create({
         title: body.title,
         description: body.description ?? "",
@@ -113,9 +125,10 @@ export const createTaskService = async (
         assignedTo: body.assignedTo,
         createdBy: userId,
         dueDate: body.dueDate,
-        taskCode: body.taskCode,
+        taskCode: generatedTaskCode, // Gán mã vừa tạo
     });
 
+    // 5. Trả về dữ liệu cho FE
     const populatedTask = await TaskModel.findById(task._id)
         .populate("createdBy", "name email avatar")
         .populate("assignedTo", "name email avatar")
@@ -231,8 +244,6 @@ export const listAllTasksInWorkspaceService = async (userId: string, workspaceId
         }
     }
 
-    const skip = (query.pageNumber - 1) * query.pageSize;
-    const limit = query.pageSize;
 
     // Tìm kiếm theo từ khóa
     if (query.keyword?.trim()) {
