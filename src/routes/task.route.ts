@@ -12,7 +12,6 @@ import {
 
 export const taskRoutes = Router();
 
-// Đặt routes cụ thể TRƯỚC
 taskRoutes.post(
     "/task/project/:projectId/workspace/:workspaceId/create",
     createTaskController
@@ -43,7 +42,6 @@ taskRoutes.delete(
     deleteTaskController
 );
 
-// Đặt routes tổng quát CUỐI
 taskRoutes.get(
     "/task/:taskId/workspace/:workspaceId",
     getTaskByIdController

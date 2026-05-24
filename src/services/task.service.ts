@@ -9,6 +9,7 @@ import { RolesEnum } from "../enums/role.enum";
 import { TaskPriorityEnum, TaskStatusEnum } from "../enums/task.enum";
 import { normalizeDescription, TiptapDocument } from "../utils/tiptap-doc.util";
 import { deleteAttachmentsForTaskService } from "./attachment.service";
+import { UpdateTaskSchemaType } from "../validation/task.validation";
 
 const isTaskCreator = (userId: string, task: TaskDocument) => task.createdBy.toString() === userId;
 
@@ -19,6 +20,15 @@ const isWorkspaceAdminOrOwner = (roleName: string) =>
     roleName === RolesEnum.ADMIN || roleName === RolesEnum.OWNER;
 
 const escapeRegex = (value: string) => value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+
+const isValidObjectId = (value: string) => mongoose.Types.ObjectId.isValid(value);
+
+const toObjectIdOrThrow = (value: string, fieldLabel: string) => {
+    if (!isValidObjectId(value)) {
+        throw new BadRequestException(`${fieldLabel} must be a valid ObjectId`);
+    }
+    return new mongoose.Types.ObjectId(value);
+};
 
 type UserPopulated = { _id?: unknown; name?: string; avatar?: string | null; email?: string };
 
@@ -89,18 +99,7 @@ export const assertTaskWorkspaceMember = async (userId: string, workspaceId: str
     await getMemberRoleInWorkspace(userId, workspaceId);
 };
 
-type UpdateTaskBody = {
-    title?: string | undefined;
-    description?: string | TiptapDocument | undefined;
-    status?: typeof TaskStatusEnum[keyof typeof TaskStatusEnum] | undefined;
-    priority?: typeof TaskPriorityEnum[keyof typeof TaskPriorityEnum] | undefined;
-    dueDate?: Date | null | undefined;
-    startDate?: Date | null | undefined;
-    assignedTo?: string | null | undefined;
-    parentTask?: string | null | undefined;
-    labels?: TaskLabel[] | undefined;
-    subtasks?: { _id?: string; title: string; completed: boolean }[] | undefined;
-};
+type UpdateTaskBody = UpdateTaskSchemaType;
 
 export type TaskUpdateAccess = "full" | "status_only";
 
@@ -240,13 +239,13 @@ export const updateTaskService = async (
     if (patch.assignedTo !== undefined) {
         changes.push({ field: "assignedTo", from: task.assignedTo?.toString() ?? null, to: patch.assignedTo });
         task.assignedTo = patch.assignedTo
-            ? new mongoose.Types.ObjectId(patch.assignedTo)
+            ? toObjectIdOrThrow(patch.assignedTo, "assignedTo")
             : (undefined as unknown as mongoose.Types.ObjectId);
     }
     if (patch.parentTask !== undefined) {
         changes.push({ field: "parentTask", from: task.parentTask?.toString() ?? null, to: patch.parentTask });
         task.parentTask = patch.parentTask
-            ? new mongoose.Types.ObjectId(patch.parentTask)
+            ? toObjectIdOrThrow(patch.parentTask, "parentTask")
             : null;
     }
     if (patch.labels !== undefined) {
@@ -263,7 +262,9 @@ export const updateTaskService = async (
     }
     if (patch.subtasks !== undefined) {
         const subtasks: TaskSubtask[] = patch.subtasks.map((st) => ({
-            _id: st._id ? new mongoose.Types.ObjectId(st._id) : new mongoose.Types.ObjectId(),
+            _id: st._id && isValidObjectId(st._id)
+                ? new mongoose.Types.ObjectId(st._id)
+                : new mongoose.Types.ObjectId(),
             title: st.title,
             completed: st.completed,
         }));

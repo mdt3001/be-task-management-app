@@ -15,7 +15,7 @@ const taskLabelSchema = z.object({
 });
 
 const taskSubtaskSchema = z.object({
-    _id: z.string().trim(),
+    _id: z.string().trim().nullable().optional(),
     title: z.string().trim().min(1).max(512),
     completed: z.boolean(),
 });
@@ -55,6 +55,8 @@ export const updateTaskSchema = z.object({
     labels: z.array(taskLabelSchema).optional(),
     subtasks: z.array(taskSubtaskSchema).optional(),
 });
+
+export type UpdateTaskSchemaType = z.infer<typeof updateTaskSchema>;
 
 export const allTasksInWorkspaceQuerySchema = z.object({
     keyword: z.string().trim().min(1).max(512).optional(),
