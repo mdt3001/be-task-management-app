@@ -4,6 +4,7 @@ import cors from "cors";
 import session from "express-session";
 import { config } from "./config/app.config";
 import connectDB from "./config/database.config";
+import "./config/redis.config";
 import { errorHandler } from "./middlewares/errorHandler.middleware";
 import { asyncHandler } from "./middlewares/asyncHandler.middleware";
 import { BadRequestException, UnauthorizedException } from "./utils/appError";
