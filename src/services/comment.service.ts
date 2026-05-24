@@ -2,6 +2,7 @@ import CommentModel from "../models/comment.model";
 import { BadRequestException, NotFoundException } from "../utils/appError";
 import { assertTaskWorkspaceMember, getTaskByIdOrThrow } from "./task.service";
 import { normalizeDescription } from "../utils/tiptap-doc.util";
+import { emitTaskCommentCreatedRealtime } from "./task-realtime.service";
 
 type UserPopulated = { _id?: unknown; name?: string; avatar?: string | null };
 
@@ -73,13 +74,21 @@ export const createTaskCommentService = async (
         .populate("authorId", "name avatar")
         .lean();
 
-    return {
-        comment: {
-            _id: String(populated!._id),
-            content: doc,
-            author: mapAuthor(populated!.authorId as UserPopulated),
-            createdAt: populated!.createdAt,
-            updatedAt: populated!.updatedAt,
-        },
+    const mappedComment = {
+        _id: String(populated!._id),
+        content: doc,
+        author: mapAuthor(populated!.authorId as UserPopulated),
+        createdAt: populated!.createdAt,
+        updatedAt: populated!.updatedAt,
     };
+
+    emitTaskCommentCreatedRealtime({
+        workspaceId,
+        projectId: task.project.toString(),
+        taskId,
+        actorId: userId,
+        comment: mappedComment,
+    });
+
+    return { comment: mappedComment };
 };

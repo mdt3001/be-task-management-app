@@ -10,6 +10,12 @@ import { TaskPriorityEnum, TaskStatusEnum } from "../enums/task.enum";
 import { normalizeDescription, TiptapDocument } from "../utils/tiptap-doc.util";
 import { deleteAttachmentsForTaskService } from "./attachment.service";
 import { UpdateTaskSchemaType } from "../validation/task.validation";
+import { notifyTaskAssignedService } from "./notification.service";
+import {
+    emitTaskCreatedRealtime,
+    emitTaskDeletedRealtime,
+    emitTaskUpdatedRealtime,
+} from "./task-realtime.service";
 
 const isTaskCreator = (userId: string, task: TaskDocument) => task.createdBy.toString() === userId;
 
@@ -195,7 +201,30 @@ export const createTaskService = async (
     });
 
     const populatedTask = await populateTaskQuery(TaskModel.findById(task._id)).lean();
-    return { task: mapTaskForFe((populatedTask ?? task.toObject()) as Record<string, unknown>) };
+
+    if (body.assignedTo && body.assignedTo !== userId) {
+        await notifyTaskAssignedService({
+            assigneeId: body.assignedTo,
+            actorId: userId,
+            workspaceId,
+            projectId,
+            taskId: String(task._id),
+            taskCode: task.taskCode,
+            title: task.title,
+        });
+    }
+
+    const mappedTask = mapTaskForFe((populatedTask ?? task.toObject()) as Record<string, unknown>);
+
+    emitTaskCreatedRealtime({
+        workspaceId,
+        projectId,
+        taskId: String(task._id),
+        actorId: userId,
+        task: mappedTask,
+    });
+
+    return { task: mappedTask };
 };
 
 export const updateTaskService = async (
@@ -215,6 +244,7 @@ export const updateTaskService = async (
 
     const access = await resolveTaskUpdateAccess(userId, task, body);
     const patch = access === "status_only" ? { status: body.status } : body;
+    const previousAssigneeId = task.assignedTo?.toString() ?? null;
 
     const changes: { field: string; from: unknown; to: unknown }[] = [];
 
@@ -275,8 +305,33 @@ export const updateTaskService = async (
     await task.save();
     await logTaskActivity(task, userId, changes);
 
+    if (patch.assignedTo !== undefined) {
+        const newAssigneeId = patch.assignedTo ?? null;
+        if (newAssigneeId && newAssigneeId !== previousAssigneeId && newAssigneeId !== userId) {
+            await notifyTaskAssignedService({
+                assigneeId: newAssigneeId,
+                actorId: userId,
+                workspaceId,
+                projectId,
+                taskId: String(task._id),
+                taskCode: task.taskCode,
+                title: task.title,
+            });
+        }
+    }
+
     const updatedTask = await populateTaskQuery(TaskModel.findById(task._id)).lean();
-    return { task: mapTaskForFe((updatedTask ?? task.toObject()) as Record<string, unknown>) };
+    const mappedTask = mapTaskForFe((updatedTask ?? task.toObject()) as Record<string, unknown>);
+
+    emitTaskUpdatedRealtime({
+        workspaceId,
+        projectId,
+        taskId: String(task._id),
+        actorId: userId,
+        task: mappedTask,
+    });
+
+    return { task: mappedTask };
 };
 
 export const getTaskActivitiesService = async (userId: string, taskId: string, workspaceId: string) => {
@@ -380,6 +435,15 @@ export const deleteTaskService = async (userId: string, taskId: string, workspac
     if (!isWorkspaceAdminOrOwner(role) && !isTaskCreator(userId, task)) {
         throw new ForbiddenException("Only the task creator or workspace admin can delete this task");
     }
+
+    const projectId = task.project.toString();
+
+    emitTaskDeletedRealtime({
+        workspaceId,
+        projectId,
+        taskId,
+        actorId: userId,
+    });
 
     // Delete all attachments from Cloudinary and soft delete them
     await deleteAttachmentsForTaskService(taskId);
