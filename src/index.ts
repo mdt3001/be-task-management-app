@@ -17,6 +17,7 @@ import { isAuthenticated } from "./middlewares/isAuthenticated.middleware";
 import memberRoutes from "./routes/member.route";
 import { workspaceProjectRoutes } from "./routes/project.route";
 import { taskRoutes } from "./routes/task.route";
+import inviteRoutes from "./routes/invite.route";
 const app = express();
 const BASE_PATH = config.BASE_PATH;
 
@@ -59,14 +60,16 @@ app.get('/', asyncHandler(async (req: Request, res: Response, next: NextFunction
   throw new BadRequestException("This is a bad request example", ErrorCodeEnum.VALIDATION_ERROR);
 }));
 
-app.use(`${BASE_PATH}/auth`, authRoutes);
+
+app.use(`${BASE_PATH}/invite`, inviteRoutes);
+app.use(`${BASE_PATH}/members`, isAuthenticated, memberRoutes);
 app.use(`${BASE_PATH}/workspaces`, isAuthenticated, workspaceProjectRoutes);
 app.use(`${BASE_PATH}/workspaces`, isAuthenticated, workspaceRoutes);
-app.use(`${BASE_PATH}/members`, isAuthenticated, memberRoutes);
+app.use(`${BASE_PATH}/auth`, authRoutes);
 app.use(`${BASE_PATH}`, isAuthenticated, taskRoutes);
 
-app.use(errorHandler);
 
+app.use(errorHandler);
 
 app.listen(config.PORT, async () => {
   console.log(`Server is running on port ${config.PORT}`);
