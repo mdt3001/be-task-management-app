@@ -4,6 +4,7 @@ import {
     deleteProjectController,
     getProjectAnalyticsController,
     getProjectByIdController,
+    getProjectTaskAnalyticsController_New,
     listProjectsController,
     updateProjectController,
 } from "../controllers/project.controller";
@@ -12,6 +13,7 @@ import {
 export const workspaceProjectRoutes = Router();
 
 workspaceProjectRoutes.get("/:workspaceId/projects/analytics", getProjectAnalyticsController);
+workspaceProjectRoutes.get("/:workspaceId/projects/:projectId/analytics", getProjectTaskAnalyticsController_New);
 workspaceProjectRoutes.get("/:workspaceId/projects", listProjectsController);
 workspaceProjectRoutes.post("/:workspaceId/projects", createProjectController);
 workspaceProjectRoutes.get("/:workspaceId/projects/:projectId", getProjectByIdController);
