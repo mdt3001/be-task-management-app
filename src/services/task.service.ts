@@ -5,6 +5,7 @@ import { BadRequestException, ForbiddenException, NotFoundException } from "../u
 import { getMemberRoleInWorkspace } from "./workspace.service";
 import { RolesEnum } from "../enums/role.enum";
 import { TaskPriorityEnum, TaskStatusEnum } from "../enums/task.enum";
+import redis from "../config/redis.config"; // <-- IMPORT REDIS Ở ĐÂY
 
 const isTaskCreator = (userId: string, task: TaskDocument) => task.createdBy.toString() === userId;
 
@@ -37,10 +38,21 @@ function normalizeDoc<T extends { assignedTo?: unknown }>(task: T | null | undef
 }
 
 export const getTaskByIdOrThrow = async (taskId: string) => {
+    // 1. Kiểm tra cache
+    const cacheKey = `task:detail:${taskId}`;
+    const cachedTask = await redis.get(cacheKey);
+    if (cachedTask) {
+        return JSON.parse(cachedTask);
+    }
+
+    // 2. Không có thì gọi DB
     const task = await TaskModel.findById(taskId);
     if (!task) {
         throw new NotFoundException("Task not found");
     }
+
+    // 3. Lưu vào Redis, sống 10 phút (600s)
+    await redis.set(cacheKey, JSON.stringify(task), "EX", 600);
     return task;
 };
 
@@ -136,6 +148,13 @@ export const createTaskService = async (
         .populate("project", "_id emoji name");
 
     const shaped = normalizeDoc(populatedTask ?? task);
+
+    // --- DỌN RÁC REDIS ---
+    const keysToDelete = await redis.keys(`tasks:${workspaceId}:*`);
+    if (keysToDelete.length > 0) await redis.del(...keysToDelete);
+    await redis.del(`project:analytics:${projectId}`);
+    // ---------------------
+
     return { task: shaped! };
 };
 
@@ -190,6 +209,14 @@ export const updateTaskService = async (
         .populate("project", "_id emoji name");
 
     const shaped = normalizeDoc(updatedTask ?? task);
+
+    // --- DỌN RÁC REDIS ---
+    await redis.del(`task:detail:${taskId}`);
+    const keysToDelete = await redis.keys(`tasks:${workspaceId}:*`);
+    if (keysToDelete.length > 0) await redis.del(...keysToDelete);
+    await redis.del(`project:analytics:${projectId}`);
+    // ---------------------
+
     return { task: shaped! };
 };
 
@@ -199,24 +226,30 @@ type ListWorkspaceTasksQuery = {
     keyword?: string | undefined;
     projectId?: string | undefined;
     assignedTo?: string | undefined;
-    status?: string | undefined;   // Đổi thành string để nhận chuỗi "TODO,IN_PROGRESS"
-    priority?: string | undefined; // Đổi thành string
+    status?: string | undefined;
+    priority?: string | undefined;
     dueDate?: string | undefined;
 };
 
 export const listAllTasksInWorkspaceService = async (userId: string, workspaceId: string, query: ListWorkspaceTasksQuery) => {
     await assertTaskWorkspaceMember(userId, workspaceId);
 
+    // 1. Kiểm tra Cache
+    const cacheKey = `tasks:${workspaceId}:${JSON.stringify(query)}`;
+    const cachedData = await redis.get(cacheKey);
+    if (cachedData) {
+        return JSON.parse(cachedData);
+    }
+
+    // 2. Không có cache thì truy vấn DB
     const filter: mongoose.FilterQuery<TaskDocument> = { workspace: workspaceId };
 
-    // Hàm cắt chuỗi tiện ích
     const parseFilter = (value: string | string[] | undefined) => {
         if (!value) return undefined;
         if (Array.isArray(value)) return value;
         return value.split(',').map(v => v.trim()).filter(Boolean);
     };
 
-    // Áp dụng lọc nhiều điều kiện
     if (query.projectId) {
         filter.project = { $in: parseFilter(query.projectId) };
     }
@@ -293,7 +326,7 @@ export const listAllTasksInWorkspaceService = async (userId: string, workspaceId
     const tasks = tasksRaw.map((t) => mapTaskForFe(t));
     const totalPages = Math.max(1, Math.ceil(total / limit));
 
-    return {
+    const result = {
         tasks,
         pagination: {
             totalCount: total,
@@ -304,6 +337,11 @@ export const listAllTasksInWorkspaceService = async (userId: string, workspaceId
             limit,
         },
     };
+
+    // 3. Lưu vào Redis, sống 5 phút (300s)
+    await redis.set(cacheKey, JSON.stringify(result), "EX", 300);
+
+    return result;
 };
 
 export const deleteTaskService = async (userId: string, taskId: string, workspaceId: string) => {
@@ -314,5 +352,13 @@ export const deleteTaskService = async (userId: string, taskId: string, workspac
     await assertTaskDeleteAccess(userId, task);
 
     await TaskModel.findByIdAndDelete(taskId);
+
+    // --- DỌN RÁC REDIS ---
+    await redis.del(`task:detail:${taskId}`);
+    const keysToDelete = await redis.keys(`tasks:${workspaceId}:*`);
+    if (keysToDelete.length > 0) await redis.del(...keysToDelete);
+    await redis.del(`project:analytics:${task.project.toString()}`);
+    // ---------------------
+
     return { message: "Task deleted successfully" };
 };

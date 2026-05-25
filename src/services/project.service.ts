@@ -8,6 +8,7 @@ import { generateUniqueProjectKey } from "../utils/projectKey.util";
 import { getMemberRoleInWorkspace } from "./workspace.service";
 import TaskModel from "../models/task.model";
 import { TaskStatusEnum } from "../enums/task.enum";
+import redis from "../config/redis.config";
 
 const isProjectCreator = (userId: string, project: ProjectDocument) =>
     project.createdBy.toString() === userId;
@@ -245,7 +246,11 @@ export const getProjectTaskAnalyticsService_New = async (
     workspaceId: string,
     projectId: string
 ) => {
-    // 1. Kiểm tra Workspace tồn tại
+    const cacheKey = `project:analytics:${projectId}`;
+    const cachedData = await redis.get(cacheKey);
+    if (cachedData) {
+        return JSON.parse(cachedData);
+    }
     const workspace = await WorkspaceModel.findById(workspaceId);
     if (!workspace) {
         throw new NotFoundException("Workspace not found");
@@ -254,7 +259,6 @@ export const getProjectTaskAnalyticsService_New = async (
     const wsObjectId = new mongoose.Types.ObjectId(workspaceId);
     const projObjectId = new mongoose.Types.ObjectId(projectId);
 
-    // Lọc theo cả Workspace và đúng Project ID từ Frontend gửi lên
     const match = {
         workspace: wsObjectId,
         project: projObjectId
@@ -262,7 +266,6 @@ export const getProjectTaskAnalyticsService_New = async (
 
     const now = new Date();
 
-    // 2. Chạy Aggregation đếm dữ liệu Task
     const [taskTotalsAgg] = await TaskModel.aggregate<{
         total: number;
         completed: number;
@@ -272,15 +275,12 @@ export const getProjectTaskAnalyticsService_New = async (
         {
             $group: {
                 _id: null,
-                // Tổng số task
                 total: { $sum: 1 },
-
                 completed: {
                     $sum: {
                         $cond: [{ $eq: ["$status", TaskStatusEnum.DONE] }, 1, 0]
                     },
                 },
-
                 overdue: {
                     $sum: {
                         $cond: [
@@ -301,11 +301,15 @@ export const getProjectTaskAnalyticsService_New = async (
 
     const totals = taskTotalsAgg ?? { total: 0, completed: 0, overdue: 0 };
 
-    return {
+    const result = {
         analytics: {
             totalTasks: totals.total,
             overdueTasks: totals.overdue,
             completedTasks: totals.completed,
         },
     };
+
+    await redis.set(cacheKey, JSON.stringify(result), "EX", 1800);
+
+    return result;
 };
