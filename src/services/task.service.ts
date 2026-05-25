@@ -100,9 +100,22 @@ export const createTaskService = async (
     projectId: string,
     body: CreateTaskBody
 ) => {
-    await assertProjectBelongsToWorkspace(projectId, workspaceId);
+    // 1. Kiểm tra quyền và project thuộc workspace
+    const project = await assertProjectBelongsToWorkspace(projectId, workspaceId);
     await assertTaskWorkspaceMember(userId, workspaceId);
 
+    // 2. ĐẾM TỔNG SỐ TASK ĐANG CÓ TRONG PROJECT NÀY
+    const totalTasks = await TaskModel.countDocuments({
+        project: projectId,
+        workspace: workspaceId
+    });
+
+    // 3. TẠO TASK CODE THEO CÔNG THỨC: Số lượng hiện tại + 1
+    const projectKey = (project as any).key || "TASK";
+    const nextTaskNumber = totalTasks + 1;
+    const generatedTaskCode = `${projectKey}-${nextTaskNumber}`;
+
+    // 4. Khởi tạo Task vào DB
     const task = await TaskModel.create({
         title: body.title,
         description: body.description ?? "",
@@ -113,9 +126,10 @@ export const createTaskService = async (
         assignedTo: body.assignedTo,
         createdBy: userId,
         dueDate: body.dueDate,
-        taskCode: body.taskCode,
+        taskCode: generatedTaskCode,
     });
 
+    // 5. Trả về dữ liệu cho FE
     const populatedTask = await TaskModel.findById(task._id)
         .populate("createdBy", "name email avatar")
         .populate("assignedTo", "name email avatar")
@@ -215,13 +229,6 @@ export const listAllTasksInWorkspaceService = async (userId: string, workspaceId
     if (query.assignedTo) {
         filter.assignedTo = { $in: parseFilter(query.assignedTo) };
     }
-    if (query.keyword?.trim()) {
-        const kw = escapeRegex(query.keyword.trim());
-        filter.$or = [
-            { title: { $regex: kw, $options: "i" } },
-            { description: { $regex: kw, $options: "i" } },
-        ];
-    }
     if (query.dueDate) {
         const d = new Date(query.dueDate);
         if (!Number.isNaN(d.getTime())) {
@@ -230,6 +237,25 @@ export const listAllTasksInWorkspaceService = async (userId: string, workspaceId
             filter.dueDate = { $gte: start, $lte: end };
         }
     }
+
+    // Tìm kiếm theo từ khóa
+    if (query.keyword?.trim()) {
+        const kw = escapeRegex(query.keyword.trim());
+        filter.$or = [
+            { title: { $regex: kw, $options: "i" } },
+            { description: { $regex: kw, $options: "i" } },
+        ];
+    }
+
+    if (query.dueDate) {
+        const d = new Date(query.dueDate);
+        if (!Number.isNaN(d.getTime())) {
+            const start = new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate(), 0, 0, 0, 0));
+            const end = new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate(), 23, 59, 59, 999));
+            filter.dueDate = { $gte: start, $lte: end };
+        }
+    }
+
 
     // Tìm kiếm theo từ khóa
     if (query.keyword?.trim()) {
