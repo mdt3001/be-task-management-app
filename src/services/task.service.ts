@@ -91,7 +91,7 @@ type CreateTaskBody = {
     priority: typeof TaskPriorityEnum[keyof typeof TaskPriorityEnum];
     dueDate: Date;
     assignedTo: string;
-    taskCode: string;
+    taskCode?: string | undefined;
 };
 
 export const createTaskService = async (

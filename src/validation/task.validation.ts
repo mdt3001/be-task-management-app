@@ -23,7 +23,7 @@ export const createTaskSchema = z.object({
     priority: taskPriorityZodEnum,
     dueDate: z.coerce.date().catch(new Date()),
     assignedTo: z.string().trim().min(1, "assignedTo is required").max(255),
-    taskCode: z.string().trim().min(1, "Task code is required").max(255),
+    taskCode: z.string().trim().min(1, "Task code is required").max(255).optional(),
 });
 
 export const updateTaskSchema = z.object({
