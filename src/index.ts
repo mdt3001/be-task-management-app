@@ -4,6 +4,7 @@ import cors from "cors";
 import { createServer } from "http";
 import { config } from "./config/app.config";
 import connectDB from "./config/database.config";
+import "./config/redis.config";
 import { errorHandler } from "./middlewares/errorHandler.middleware";
 import { asyncHandler } from "./middlewares/asyncHandler.middleware";
 import { BadRequestException, UnauthorizedException } from "./utils/appError";
@@ -40,7 +41,9 @@ app.get('/', asyncHandler(async (req: Request, res: Response, next: NextFunction
   throw new BadRequestException("This is a bad request example", ErrorCodeEnum.VALIDATION_ERROR);
 }));
 
-app.use(`${BASE_PATH}/auth`, authRoutes);
+
+app.use(`${BASE_PATH}/invite`, inviteRoutes);
+app.use(`${BASE_PATH}/members`, isAuthenticated, memberRoutes);
 app.use(`${BASE_PATH}/workspaces`, isAuthenticated, workspaceProjectRoutes);
 app.use(`${BASE_PATH}/workspaces`, isAuthenticated, workspaceRoutes);
 app.use(`${BASE_PATH}/workspaces`, isAuthenticated, notificationRoutes);
@@ -48,8 +51,8 @@ app.use(`${BASE_PATH}/members`, isAuthenticated, memberRoutes);
 app.use(`${BASE_PATH}`, isAuthenticated, taskRoutes);
 app.use(`${BASE_PATH}`, isAuthenticated, attachmentRoutes);
 
-app.use(errorHandler);
 
+app.use(errorHandler);
 
 
 const httpServer = createServer(app);

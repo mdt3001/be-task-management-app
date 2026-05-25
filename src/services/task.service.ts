@@ -78,10 +78,21 @@ const populateTaskQuery = (query: mongoose.Query<unknown, unknown>) =>
         .populate("parentTask", "_id taskCode title");
 
 export const getTaskByIdOrThrow = async (taskId: string) => {
+    // 1. Kiểm tra cache
+    const cacheKey = `task:detail:${taskId}`;
+    const cachedTask = await redis.get(cacheKey);
+    if (cachedTask) {
+        return JSON.parse(cachedTask);
+    }
+
+    // 2. Không có thì gọi DB
     const task = await TaskModel.findById(taskId);
     if (!task) {
         throw new NotFoundException("Task not found");
     }
+
+    // 3. Lưu vào Redis, sống 10 phút (600s)
+    await redis.set(cacheKey, JSON.stringify(task), "EX", 600);
     return task;
 };
 
@@ -177,6 +188,7 @@ type CreateTaskBody = {
     priority: typeof TaskPriorityEnum[keyof typeof TaskPriorityEnum];
     dueDate: Date;
     assignedTo: string;
+    taskCode?: string | undefined;
 };
 
 export const createTaskService = async (
@@ -185,9 +197,22 @@ export const createTaskService = async (
     projectId: string,
     body: CreateTaskBody
 ) => {
-    await assertProjectBelongsToWorkspace(projectId, workspaceId);
+    // 1. Kiểm tra quyền và project thuộc workspace
+    const project = await assertProjectBelongsToWorkspace(projectId, workspaceId);
     await assertTaskWorkspaceMember(userId, workspaceId);
 
+    // 2. ĐẾM TỔNG SỐ TASK ĐANG CÓ TRONG PROJECT NÀY
+    const totalTasks = await TaskModel.countDocuments({
+        project: projectId,
+        workspace: workspaceId
+    });
+
+    // 3. TẠO TASK CODE THEO CÔNG THỨC: Số lượng hiện tại + 1
+    const projectKey = (project as any).key || "TASK";
+    const nextTaskNumber = totalTasks + 1;
+    const generatedTaskCode = `${projectKey}-${nextTaskNumber}`;
+
+    // 4. Khởi tạo Task vào DB
     const task = await TaskModel.create({
         title: body.title,
         description: normalizeDescription(body.description),
@@ -198,6 +223,7 @@ export const createTaskService = async (
         assignedTo: body.assignedTo,
         createdBy: userId,
         dueDate: body.dueDate,
+        taskCode: generatedTaskCode,
     });
 
     const populatedTask = await populateTaskQuery(TaskModel.findById(task._id)).lean();
@@ -361,27 +387,71 @@ type ListWorkspaceTasksQuery = {
     keyword?: string | undefined;
     projectId?: string | undefined;
     assignedTo?: string | undefined;
-    status?: typeof TaskStatusEnum[keyof typeof TaskStatusEnum] | undefined;
-    priority?: typeof TaskPriorityEnum[keyof typeof TaskPriorityEnum] | undefined;
+    status?: string | undefined;
+    priority?: string | undefined;
     dueDate?: string | undefined;
 };
 
 export const listAllTasksInWorkspaceService = async (userId: string, workspaceId: string, query: ListWorkspaceTasksQuery) => {
     await assertTaskWorkspaceMember(userId, workspaceId);
 
+    // 1. Kiểm tra Cache
+    const cacheKey = `tasks:${workspaceId}:${JSON.stringify(query)}`;
+    const cachedData = await redis.get(cacheKey);
+    if (cachedData) {
+        return JSON.parse(cachedData);
+    }
+
+    // 2. Không có cache thì truy vấn DB
     const filter: mongoose.FilterQuery<TaskDocument> = { workspace: workspaceId };
+
+    const parseFilter = (value: string | string[] | undefined) => {
+        if (!value) return undefined;
+        if (Array.isArray(value)) return value;
+        return value.split(',').map(v => v.trim()).filter(Boolean);
+    };
+
     if (query.projectId) {
-        filter.project = query.projectId;
+        filter.project = { $in: parseFilter(query.projectId) };
     }
     if (query.status) {
-        filter.status = query.status;
+        filter.status = { $in: parseFilter(query.status) };
     }
     if (query.priority) {
-        filter.priority = query.priority;
+        filter.priority = { $in: parseFilter(query.priority) };
     }
     if (query.assignedTo) {
-        filter.assignedTo = query.assignedTo;
+        filter.assignedTo = { $in: parseFilter(query.assignedTo) };
     }
+    if (query.dueDate) {
+        const d = new Date(query.dueDate);
+        if (!Number.isNaN(d.getTime())) {
+            const start = new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate(), 0, 0, 0, 0));
+            const end = new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate(), 23, 59, 59, 999));
+            filter.dueDate = { $gte: start, $lte: end };
+        }
+    }
+
+    // Tìm kiếm theo từ khóa
+    if (query.keyword?.trim()) {
+        const kw = escapeRegex(query.keyword.trim());
+        filter.$or = [
+            { title: { $regex: kw, $options: "i" } },
+            { description: { $regex: kw, $options: "i" } },
+        ];
+    }
+
+    if (query.dueDate) {
+        const d = new Date(query.dueDate);
+        if (!Number.isNaN(d.getTime())) {
+            const start = new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate(), 0, 0, 0, 0));
+            const end = new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate(), 23, 59, 59, 999));
+            filter.dueDate = { $gte: start, $lte: end };
+        }
+    }
+
+
+    // Tìm kiếm theo từ khóa
     if (query.keyword?.trim()) {
         const kw = escapeRegex(query.keyword.trim());
         filter.$or = [
@@ -389,6 +459,7 @@ export const listAllTasksInWorkspaceService = async (userId: string, workspaceId
             { taskCode: { $regex: kw, $options: "i" } },
         ];
     }
+
     if (query.dueDate) {
         const d = new Date(query.dueDate);
         if (!Number.isNaN(d.getTime())) {
@@ -413,7 +484,7 @@ export const listAllTasksInWorkspaceService = async (userId: string, workspaceId
     const tasks = (tasksRaw as unknown as Record<string, unknown>[]).map((t) => mapTaskForFe(t));
     const totalPages = Math.max(1, Math.ceil(total / limit));
 
-    return {
+    const result = {
         tasks,
         pagination: {
             totalCount: total,
@@ -424,6 +495,11 @@ export const listAllTasksInWorkspaceService = async (userId: string, workspaceId
             limit,
         },
     };
+
+    // 3. Lưu vào Redis, sống 5 phút (300s)
+    await redis.set(cacheKey, JSON.stringify(result), "EX", 300);
+
+    return result;
 };
 
 export const deleteTaskService = async (userId: string, taskId: string, workspaceId: string) => {
@@ -449,5 +525,13 @@ export const deleteTaskService = async (userId: string, taskId: string, workspac
     await deleteAttachmentsForTaskService(taskId);
 
     await TaskModel.findByIdAndDelete(taskId);
+
+    // --- DỌN RÁC REDIS ---
+    await redis.del(`task:detail:${taskId}`);
+    const keysToDelete = await redis.keys(`tasks:${workspaceId}:*`);
+    if (keysToDelete.length > 0) await redis.del(...keysToDelete);
+    await redis.del(`project:analytics:${task.project.toString()}`);
+    // ---------------------
+
     return { message: "Task deleted successfully" };
 };

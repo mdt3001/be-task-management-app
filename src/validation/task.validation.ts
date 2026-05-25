@@ -41,6 +41,7 @@ export const createTaskSchema = z.object({
     priority: taskPriorityZodEnum,
     dueDate: z.coerce.date().catch(new Date()),
     assignedTo: z.string().trim().min(1, "assignedTo is required").max(255),
+    taskCode: z.string().trim().min(1, "Task code is required").max(255).optional(),
 });
 
 export const updateTaskSchema = z.object({
@@ -60,10 +61,23 @@ export type UpdateTaskSchemaType = z.infer<typeof updateTaskSchema>;
 
 export const allTasksInWorkspaceQuerySchema = z.object({
     keyword: z.string().trim().min(1).max(512).optional(),
-    projectId: z.string().trim().min(1).max(255).optional(),
-    assignedTo: z.string().trim().min(1).max(255).optional(),
-    priority: taskPriorityZodEnum.optional(),
-    status: taskStatusZodEnum.optional(),
+    projectId: z.string().trim().min(1).max(512).optional(),
+    assignedTo: z.string().trim().min(1).max(512).optional(),
+
+    status: z.string().optional().refine((val) => {
+        if (!val) return true;
+        return val.split(",").every((item) => taskStatusZodEnum.options.includes(item.trim() as any));
+    }, {
+        message: `Invalid option: expected one or more of ${taskStatusZodEnum.options.join("|")}`
+    }),
+
+    priority: z.string().optional().refine((val) => {
+        if (!val) return true;
+        return val.split(",").every((item) => taskPriorityZodEnum.options.includes(item.trim() as any));
+    }, {
+        message: `Invalid option: expected one or more of ${taskPriorityZodEnum.options.join("|")}`
+    }),
+
     dueDate: z.string().trim().min(1).max(64).optional(),
     pageNumber: z.coerce.number().int().min(1).default(1),
     pageSize: z.coerce.number().int().min(1).max(100).default(10),
