@@ -1,7 +1,7 @@
 import "dotenv/config";
 import express, { Request, Response, NextFunction } from "express";
 import cors from "cors";
-import session from "express-session";
+import { createServer } from "http";
 import { config } from "./config/app.config";
 import connectDB from "./config/database.config";
 import "./config/redis.config";
@@ -12,44 +12,24 @@ import { ErrorCodeEnum } from "./enums/error-code.enum";
 import { setupSwagger } from "./config/swagger.config";
 import passport from "./config/passport.config";
 import authRoutes from "./routes/auth.route";
-import MongoStore from "connect-mongo";
+import { sessionMiddleware } from "./config/session.config";
+import { initSocketServer } from "./config/socket.config";
 import workspaceRoutes from "./routes/workspace.route";
 import { isAuthenticated } from "./middlewares/isAuthenticated.middleware";
 import memberRoutes from "./routes/member.route";
 import { workspaceProjectRoutes } from "./routes/project.route";
 import { taskRoutes } from "./routes/task.route";
-import inviteRoutes from "./routes/invite.route";
+import { attachmentRoutes } from "./routes/attachment.route";
+import { notificationRoutes } from "./routes/notification.route";
+import connectCloudinary from "./config/cloudinary.config";
+
 const app = express();
 const BASE_PATH = config.BASE_PATH;
-
 setupSwagger(app);
-
 app.use(express.json());
-
-app.use(
-  session({
-    name: "session",
-    secret: config.SESSION_SECRET,
-    resave: false,
-    saveUninitialized: false,
-    store: config.NODE_ENV === "production"
-      ? (MongoStore.create({
-        mongoUrl: config.MONGO_URI,
-        collectionName: "sessions"
-      }))
-      : undefined,
-    cookie: {
-      maxAge: 24 * 60 * 60 * 1000,
-      secure: config.NODE_ENV === "production",
-      httpOnly: true,
-      sameSite: "lax",
-    },
-  })
-);
-
+app.use(sessionMiddleware);
 app.use(passport.initialize());
 app.use(passport.session());
-
 app.use(
   cors({
     origin: config.FRONTEND_ORIGIN,
@@ -66,13 +46,22 @@ app.use(`${BASE_PATH}/invite`, inviteRoutes);
 app.use(`${BASE_PATH}/members`, isAuthenticated, memberRoutes);
 app.use(`${BASE_PATH}/workspaces`, isAuthenticated, workspaceProjectRoutes);
 app.use(`${BASE_PATH}/workspaces`, isAuthenticated, workspaceRoutes);
-app.use(`${BASE_PATH}/auth`, authRoutes);
+app.use(`${BASE_PATH}/workspaces`, isAuthenticated, notificationRoutes);
+app.use(`${BASE_PATH}/members`, isAuthenticated, memberRoutes);
 app.use(`${BASE_PATH}`, isAuthenticated, taskRoutes);
+app.use(`${BASE_PATH}`, isAuthenticated, attachmentRoutes);
 
 
 app.use(errorHandler);
 
-app.listen(config.PORT, async () => {
+
+const httpServer = createServer(app);
+
+initSocketServer(httpServer);
+
+httpServer.listen(config.PORT, async () => {
   console.log(`Server is running on port ${config.PORT}`);
   await connectDB();
+  await connectCloudinary();
 });
+

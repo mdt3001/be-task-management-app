@@ -1,11 +1,21 @@
 import mongoose from "mongoose";
-import TaskModel, { TaskDocument } from "../models/task.model";
+import TaskModel, { TaskDocument, TaskLabel, TaskSubtask } from "../models/task.model";
 import ProjectModel from "../models/project.model";
+import TaskActivityModel from "../models/task-activity.model";
+import { TaskActivityActionEnum } from "../enums/task-activity.enum";
 import { BadRequestException, ForbiddenException, NotFoundException } from "../utils/appError";
 import { getMemberRoleInWorkspace } from "./workspace.service";
 import { RolesEnum } from "../enums/role.enum";
 import { TaskPriorityEnum, TaskStatusEnum } from "../enums/task.enum";
-import redis from "../config/redis.config"; // <-- IMPORT REDIS Ở ĐÂY
+import { normalizeDescription, TiptapDocument } from "../utils/tiptap-doc.util";
+import { deleteAttachmentsForTaskService } from "./attachment.service";
+import { UpdateTaskSchemaType } from "../validation/task.validation";
+import { notifyTaskAssignedService } from "./notification.service";
+import {
+    emitTaskCreatedRealtime,
+    emitTaskDeletedRealtime,
+    emitTaskUpdatedRealtime,
+} from "./task-realtime.service";
 
 const isTaskCreator = (userId: string, task: TaskDocument) => task.createdBy.toString() === userId;
 
@@ -17,25 +27,55 @@ const isWorkspaceAdminOrOwner = (roleName: string) =>
 
 const escapeRegex = (value: string) => value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 
-function mapTaskForFe<T extends { assignedTo?: unknown }>(task: T): T {
-    const assigned = task.assignedTo as { _id?: unknown; name?: string; avatar?: string | null } | null | undefined;
-    if (!assigned || typeof assigned !== "object") {
-        return task;
+const isValidObjectId = (value: string) => mongoose.Types.ObjectId.isValid(value);
+
+const toObjectIdOrThrow = (value: string, fieldLabel: string) => {
+    if (!isValidObjectId(value)) {
+        throw new BadRequestException(`${fieldLabel} must be a valid ObjectId`);
     }
-    const { avatar, ...rest } = assigned as { _id?: unknown; name?: string; avatar?: string | null;[k: string]: unknown };
+    return new mongoose.Types.ObjectId(value);
+};
+
+type UserPopulated = { _id?: unknown; name?: string; avatar?: string | null; email?: string };
+
+function mapUserForFe(user: UserPopulated | null | undefined) {
+    if (!user || typeof user !== "object") {
+        return null;
+    }
     return {
-        ...task,
-        assignedTo: {
-            ...rest,
-            profilePicture: avatar ?? null,
-        },
-    } as T;
+        _id: String(user._id),
+        name: user.name ?? "Unknown",
+        profilePicture: user.avatar ?? null,
+    };
 }
 
-function normalizeDoc<T extends { assignedTo?: unknown }>(task: T | null | undefined): T | null | undefined {
-    if (!task) return task;
-    return mapTaskForFe(task);
+function mapTaskForFe<T extends Record<string, unknown>>(task: T) {
+    const assigned = task.assignedTo as UserPopulated | null | undefined;
+    const createdBy = task.createdBy as UserPopulated | null | undefined;
+    const parentTask = task.parentTask as { _id?: unknown; taskCode?: string; title?: string } | null | undefined;
+
+    return {
+        ...task,
+        description: normalizeDescription(task.description),
+        assignedTo: mapUserForFe(assigned),
+        reporter: mapUserForFe(createdBy),
+        parentTask:
+            parentTask && typeof parentTask === "object" && parentTask._id
+                ? {
+                      _id: String(parentTask._id),
+                      taskCode: parentTask.taskCode ?? "",
+                      title: parentTask.title ?? "",
+                  }
+                : null,
+    };
 }
+
+const populateTaskQuery = (query: mongoose.Query<unknown, unknown>) =>
+    query
+        .populate("createdBy", "name email avatar")
+        .populate("assignedTo", "name email avatar")
+        .populate("project", "_id emoji name")
+        .populate("parentTask", "_id taskCode title");
 
 export const getTaskByIdOrThrow = async (taskId: string) => {
     // 1. Kiểm tra cache
@@ -76,29 +116,74 @@ export const assertTaskWorkspaceMember = async (userId: string, workspaceId: str
     await getMemberRoleInWorkspace(userId, workspaceId);
 };
 
-export const assertTaskReadAccess = async (userId: string, task: TaskDocument) => {
-    await assertTaskWorkspaceMember(userId, task.workspace.toString());
+type UpdateTaskBody = UpdateTaskSchemaType;
+
+export type TaskUpdateAccess = "full" | "status_only";
+
+const isStatusOnlyUpdateBody = (body: UpdateTaskBody) => {
+    const fields = (Object.keys(body) as (keyof UpdateTaskBody)[]).filter((key) => body[key] !== undefined);
+    return fields.length > 0 && fields.every((key) => key === "status");
 };
 
-export const assertTaskUpdateAccess = async (userId: string, task: TaskDocument) => {
+export const resolveTaskUpdateAccess = async (
+    userId: string,
+    task: TaskDocument,
+    body: UpdateTaskBody
+): Promise<TaskUpdateAccess> => {
     const { role } = await getMemberRoleInWorkspace(userId, task.workspace.toString());
-    if (isWorkspaceAdminOrOwner(role) || isTaskCreator(userId, task) || isTaskAssignee(userId, task)) {
-        return;
-    }
-    throw new ForbiddenException("Only the task creator, assignee, or workspace admin can update this task");
-};
 
-export const assertTaskDeleteAccess = async (userId: string, task: TaskDocument) => {
-    const { role } = await getMemberRoleInWorkspace(userId, task.workspace.toString());
     if (isWorkspaceAdminOrOwner(role) || isTaskCreator(userId, task)) {
+        return "full";
+    }
+
+    if (isTaskAssignee(userId, task)) {
+        if (isStatusOnlyUpdateBody(body)) {
+            return "status_only";
+        }
+        throw new ForbiddenException("Assignees can only update the task status");
+    }
+
+    throw new ForbiddenException("You do not have permission to update this task");
+};
+
+const logTaskActivity = async (
+    task: TaskDocument,
+    actorId: string,
+    changes: { field: string; from: unknown; to: unknown }[]
+) => {
+    if (changes.length === 0) {
         return;
     }
-    throw new ForbiddenException("Only the task creator or workspace admin can delete this task");
+    await TaskActivityModel.create({
+        taskId: task._id,
+        workspaceId: task.workspace,
+        actorId,
+        action: TaskActivityActionEnum.UPDATED,
+        changes,
+        metadata: null,
+    });
+};
+
+export const getTaskByIdService = async (userId: string, taskId: string, workspaceId: string) => {
+    const task = await populateTaskQuery(TaskModel.findById(taskId)).lean();
+
+    if (!task) {
+        throw new NotFoundException("Task not found");
+    }
+
+    const doc = task as unknown as TaskDocument & Record<string, unknown>;
+    if (doc.workspace.toString() !== workspaceId) {
+        throw new BadRequestException("Task does not belong to this workspace");
+    }
+
+    await assertTaskWorkspaceMember(userId, workspaceId);
+
+    return { task: mapTaskForFe(doc as Record<string, unknown>) };
 };
 
 type CreateTaskBody = {
     title: string;
-    description?: string | undefined;
+    description?: string | TiptapDocument | undefined;
     status: typeof TaskStatusEnum[keyof typeof TaskStatusEnum];
     priority: typeof TaskPriorityEnum[keyof typeof TaskPriorityEnum];
     dueDate: Date;
@@ -130,7 +215,7 @@ export const createTaskService = async (
     // 4. Khởi tạo Task vào DB
     const task = await TaskModel.create({
         title: body.title,
-        description: body.description ?? "",
+        description: normalizeDescription(body.description),
         project: projectId,
         workspace: workspaceId,
         status: body.status ?? TaskStatusEnum.BACKLOG,
@@ -141,30 +226,31 @@ export const createTaskService = async (
         taskCode: generatedTaskCode,
     });
 
-    // 5. Trả về dữ liệu cho FE
-    const populatedTask = await TaskModel.findById(task._id)
-        .populate("createdBy", "name email avatar")
-        .populate("assignedTo", "name email avatar")
-        .populate("project", "_id emoji name");
+    const populatedTask = await populateTaskQuery(TaskModel.findById(task._id)).lean();
 
-    const shaped = normalizeDoc(populatedTask ?? task);
+    if (body.assignedTo && body.assignedTo !== userId) {
+        await notifyTaskAssignedService({
+            assigneeId: body.assignedTo,
+            actorId: userId,
+            workspaceId,
+            projectId,
+            taskId: String(task._id),
+            taskCode: task.taskCode,
+            title: task.title,
+        });
+    }
 
-    // --- DỌN RÁC REDIS ---
-    const keysToDelete = await redis.keys(`tasks:${workspaceId}:*`);
-    if (keysToDelete.length > 0) await redis.del(...keysToDelete);
-    await redis.del(`project:analytics:${projectId}`);
-    // ---------------------
+    const mappedTask = mapTaskForFe((populatedTask ?? task.toObject()) as Record<string, unknown>);
 
-    return { task: shaped! };
-};
+    emitTaskCreatedRealtime({
+        workspaceId,
+        projectId,
+        taskId: String(task._id),
+        actorId: userId,
+        task: mappedTask,
+    });
 
-type UpdateTaskBody = {
-    title?: string | undefined;
-    description?: string | undefined;
-    status?: typeof TaskStatusEnum[keyof typeof TaskStatusEnum] | undefined;
-    priority?: typeof TaskPriorityEnum[keyof typeof TaskPriorityEnum] | undefined;
-    dueDate?: Date | undefined;
-    assignedTo?: string | null | undefined;
+    return { task: mappedTask };
 };
 
 export const updateTaskService = async (
@@ -182,42 +268,117 @@ export const updateTaskService = async (
         throw new BadRequestException("Task does not belong to this project");
     }
 
-    if (body.title !== undefined) {
-        task.title = body.title;
+    const access = await resolveTaskUpdateAccess(userId, task, body);
+    const patch = access === "status_only" ? { status: body.status } : body;
+    const previousAssigneeId = task.assignedTo?.toString() ?? null;
+
+    const changes: { field: string; from: unknown; to: unknown }[] = [];
+
+    if (patch.title !== undefined && patch.title !== task.title) {
+        changes.push({ field: "title", from: task.title, to: patch.title });
+        task.title = patch.title;
     }
-    if (body.description !== undefined) {
-        task.description = body.description ?? "";
+    if (patch.description !== undefined) {
+        const next = normalizeDescription(patch.description);
+        changes.push({ field: "description", from: task.description, to: next });
+        task.description = next;
     }
-    if (body.status !== undefined) {
-        task.status = body.status;
+    if (patch.status !== undefined && patch.status !== task.status) {
+        changes.push({ field: "status", from: task.status, to: patch.status });
+        task.status = patch.status;
     }
-    if (body.priority !== undefined) {
-        task.priority = body.priority;
+    if (patch.priority !== undefined && patch.priority !== task.priority) {
+        changes.push({ field: "priority", from: task.priority, to: patch.priority });
+        task.priority = patch.priority;
     }
-    if (body.dueDate !== undefined) {
-        task.dueDate = body.dueDate ?? undefined as any;
+
+    if (patch.assignedTo !== undefined) {
+        changes.push({ field: "assignedTo", from: task.assignedTo?.toString() ?? null, to: patch.assignedTo });
+        task.assignedTo = patch.assignedTo
+            ? toObjectIdOrThrow(patch.assignedTo, "assignedTo")
+            : (undefined as unknown as mongoose.Types.ObjectId);
     }
-    if (body.assignedTo !== undefined) {
-        task.assignedTo = body.assignedTo ? new mongoose.Types.ObjectId(body.assignedTo) : (undefined as any);
+    if (patch.parentTask !== undefined) {
+        changes.push({ field: "parentTask", from: task.parentTask?.toString() ?? null, to: patch.parentTask });
+        task.parentTask = patch.parentTask
+            ? toObjectIdOrThrow(patch.parentTask, "parentTask")
+            : null;
+    }
+    if (patch.labels !== undefined) {
+        changes.push({ field: "labels", from: task.labels, to: patch.labels });
+        task.labels = patch.labels;
+    }
+    if (patch.dueDate !== undefined) {
+        changes.push({ field: "dueDate", from: task.dueDate, to: patch.dueDate });
+        task.dueDate = patch.dueDate;
+    }
+    if (patch.startDate !== undefined) {
+        changes.push({ field: "startDate", from: task.startDate, to: patch.startDate });
+        task.startDate = patch.startDate;
+    }
+    if (patch.subtasks !== undefined) {
+        const subtasks: TaskSubtask[] = patch.subtasks.map((st) => ({
+            _id: st._id && isValidObjectId(st._id)
+                ? new mongoose.Types.ObjectId(st._id)
+                : new mongoose.Types.ObjectId(),
+            title: st.title,
+            completed: st.completed,
+        }));
+        changes.push({ field: "subtasks", from: task.subtasks, to: subtasks });
+        task.subtasks = subtasks;
     }
 
     await task.save();
+    await logTaskActivity(task, userId, changes);
 
-    const updatedTask = await TaskModel.findById(task._id)
-        .populate("createdBy", "name email avatar")
-        .populate("assignedTo", "name email avatar")
-        .populate("project", "_id emoji name");
+    if (patch.assignedTo !== undefined) {
+        const newAssigneeId = patch.assignedTo ?? null;
+        if (newAssigneeId && newAssigneeId !== previousAssigneeId && newAssigneeId !== userId) {
+            await notifyTaskAssignedService({
+                assigneeId: newAssigneeId,
+                actorId: userId,
+                workspaceId,
+                projectId,
+                taskId: String(task._id),
+                taskCode: task.taskCode,
+                title: task.title,
+            });
+        }
+    }
 
-    const shaped = normalizeDoc(updatedTask ?? task);
+    const updatedTask = await populateTaskQuery(TaskModel.findById(task._id)).lean();
+    const mappedTask = mapTaskForFe((updatedTask ?? task.toObject()) as Record<string, unknown>);
 
-    // --- DỌN RÁC REDIS ---
-    await redis.del(`task:detail:${taskId}`);
-    const keysToDelete = await redis.keys(`tasks:${workspaceId}:*`);
-    if (keysToDelete.length > 0) await redis.del(...keysToDelete);
-    await redis.del(`project:analytics:${projectId}`);
-    // ---------------------
+    emitTaskUpdatedRealtime({
+        workspaceId,
+        projectId,
+        taskId: String(task._id),
+        actorId: userId,
+        task: mappedTask,
+    });
 
-    return { task: shaped! };
+    return { task: mappedTask };
+};
+
+export const getTaskActivitiesService = async (userId: string, taskId: string, workspaceId: string) => {
+    const task = await getTaskByIdOrThrow(taskId);
+    if (task.workspace.toString() !== workspaceId) {
+        throw new BadRequestException("Task does not belong to this workspace");
+    }
+    await assertTaskWorkspaceMember(userId, workspaceId);
+
+    const activities = await TaskActivityModel.find({ taskId })
+        .sort({ createdAt: -1 })
+        .limit(50)
+        .populate("actorId", "name avatar")
+        .lean();
+
+    return {
+        activities: activities.map((a) => ({
+            ...a,
+            actor: mapUserForFe(a.actorId as UserPopulated),
+        })),
+    };
 };
 
 type ListWorkspaceTasksQuery = {
@@ -295,7 +456,7 @@ export const listAllTasksInWorkspaceService = async (userId: string, workspaceId
         const kw = escapeRegex(query.keyword.trim());
         filter.$or = [
             { title: { $regex: kw, $options: "i" } },
-            { description: { $regex: kw, $options: "i" } },
+            { taskCode: { $regex: kw, $options: "i" } },
         ];
     }
 
@@ -312,18 +473,15 @@ export const listAllTasksInWorkspaceService = async (userId: string, workspaceId
     const limit = query.pageSize;
 
     const [tasksRaw, total] = await Promise.all([
-        TaskModel.find(filter)
+        populateTaskQuery(TaskModel.find(filter))
             .sort({ updatedAt: -1 })
             .skip(skip)
             .limit(limit)
-            .populate("createdBy", "name email avatar")
-            .populate("assignedTo", "name email avatar")
-            .populate("project", "_id emoji name")
             .lean(),
         TaskModel.countDocuments(filter),
     ]);
 
-    const tasks = tasksRaw.map((t) => mapTaskForFe(t));
+    const tasks = (tasksRaw as unknown as Record<string, unknown>[]).map((t) => mapTaskForFe(t));
     const totalPages = Math.max(1, Math.ceil(total / limit));
 
     const result = {
@@ -349,7 +507,22 @@ export const deleteTaskService = async (userId: string, taskId: string, workspac
     if (task.workspace.toString() !== workspaceId) {
         throw new BadRequestException("Task does not belong to this workspace");
     }
-    await assertTaskDeleteAccess(userId, task);
+    const { role } = await getMemberRoleInWorkspace(userId, workspaceId);
+    if (!isWorkspaceAdminOrOwner(role) && !isTaskCreator(userId, task)) {
+        throw new ForbiddenException("Only the task creator or workspace admin can delete this task");
+    }
+
+    const projectId = task.project.toString();
+
+    emitTaskDeletedRealtime({
+        workspaceId,
+        projectId,
+        taskId,
+        actorId: userId,
+    });
+
+    // Delete all attachments from Cloudinary and soft delete them
+    await deleteAttachmentsForTaskService(taskId);
 
     await TaskModel.findByIdAndDelete(taskId);
 
