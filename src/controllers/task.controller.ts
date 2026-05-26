@@ -107,7 +107,8 @@ export const listAllTasksInWorkspaceController = asyncHandler(async (req: Reques
     // Dữ liệu query giờ đã được validate trơn tru qua schema mới
     const query = allTasksInWorkspaceQuerySchema.parse(req.query);
 
-    const { tasks, pagination } = await listAllTasksInWorkspaceService(String(userId), workspaceId, query);
+    // Ensure query types align with service expectations (status may be a specific union)
+    const { tasks, pagination } = await listAllTasksInWorkspaceService(String(userId), workspaceId, query as any);
 
     return res.status(HTTPSTATUS.OK).json({
         message: "Tasks retrieved successfully",

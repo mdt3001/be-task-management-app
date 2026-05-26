@@ -284,7 +284,11 @@ export const updateTaskService = async (
     taskId: string,
     body: UpdateTaskBody
 ) => {
-    const task = await getTaskByIdOrThrow(taskId);
+    // Fetch task without cache for update operations (need Mongoose document for .save())
+    const task = await TaskModel.findById(taskId);
+    if (!task) {
+        throw new NotFoundException("Task not found");
+    }
     if (task.workspace.toString() !== workspaceId) {
         throw new BadRequestException("Task does not belong to this workspace");
     }
