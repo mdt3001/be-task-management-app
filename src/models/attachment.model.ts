@@ -9,6 +9,7 @@ export interface Attachment {
     size: number;
     storageKey: string;
     url: string;
+    deletedAt?: Date | null;
     createdAt: Date;
     updatedAt: Date;
 }
@@ -25,6 +26,7 @@ const attachmentSchema = new Schema<AttachmentDocument>(
         size: { type: Number, required: true, min: 0 },
         storageKey: { type: String, required: true, trim: true },
         url: { type: String, required: true, trim: true },
+        deletedAt: { type: Date, default: null },
     },
     {
         timestamps: true,
@@ -32,6 +34,7 @@ const attachmentSchema = new Schema<AttachmentDocument>(
 );
 
 attachmentSchema.index({ taskId: 1, createdAt: -1 });
+attachmentSchema.index({ deletedAt: 1 });
 
 const AttachmentModel = mongoose.model<AttachmentDocument>("Attachment", attachmentSchema);
 export default AttachmentModel;
