@@ -15,6 +15,10 @@ const appConfig = () => ({
 
     FRONTEND_ORIGIN: getEnv("FRONTEND_ORIGIN", "http://localhost:5173"),
     FRONTEND_GOOGLE_CALLBACK_URL: getEnv("FRONTEND_GOOGLE_CALLBACK_URL", "http://localhost:5173/auth/google/callback"),
+
+    CLOUDINARY_API_KEY: getEnv("CLOUDINARY_API_KEY", ""),
+    CLOUDINARY_SECRET_KEY: getEnv("CLOUDINARY_SECRET_KEY", ""),
+    CLOUDINARY_NAME: getEnv("CLOUDINARY_NAME", ""),
 });
 
 export const config =appConfig();
