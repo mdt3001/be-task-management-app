@@ -26,17 +26,26 @@ import connectCloudinary from "./config/cloudinary.config";
 
 const app = express();
 const BASE_PATH = config.BASE_PATH;
+
+// Trust proxy for Render/production
+if (config.NODE_ENV === "production") {
+  app.set("trust proxy", 1);
+}
+
 setupSwagger(app);
 app.use(express.json());
-app.use(sessionMiddleware);
-app.use(passport.initialize());
-app.use(passport.session());
+
+// CORS must be before session
 app.use(
   cors({
     origin: config.FRONTEND_ORIGIN,
     credentials: true,
   })
 );
+
+app.use(sessionMiddleware);
+app.use(passport.initialize());
+app.use(passport.session());
 
 app.get('/', asyncHandler(async (req: Request, res: Response, next: NextFunction) => {
   throw new BadRequestException("This is a bad request example", ErrorCodeEnum.VALIDATION_ERROR);

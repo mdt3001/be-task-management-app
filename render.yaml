@@ -9,3 +9,7 @@ services:
     envVars:
       - key: NODE_ENV
         value: production
+      - key: FRONTEND_ORIGIN
+        value: https://fe-task-management-app-pt9b.vercel.app
+      - key: FRONTEND_GOOGLE_CALLBACK_URL
+        value: https://fe-task-management-app-pt9b.vercel.app/auth/google/callback
