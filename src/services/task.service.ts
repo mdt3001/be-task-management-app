@@ -445,22 +445,22 @@ export const listAllTasksInWorkspaceService = async (
     const filter: mongoose.FilterQuery<TaskDocument> = { workspace: workspaceId };
 
     if (query.projectId) {
-        filter.project = query.projectId;
+        filter.project = { $in: parseFilter(query.projectId) };
     }
     if (query.status) {
-        filter.status = query.status;
+        filter.status = { $in: parseFilter(query.status) };
     }
     if (query.priority) {
-        filter.priority = query.priority;
+        filter.priority = { $in: parseFilter(query.priority) };
     }
     if (query.assignedTo) {
-        filter.assignedTo = query.assignedTo;
+        filter.assignedTo = { $in: parseFilter(query.assignedTo) };
     }
     if (query.keyword?.trim()) {
         const kw = escapeRegex(query.keyword.trim());
         filter.$or = [
             { title: { $regex: kw, $options: "i" } },
-            { taskCode: { $regex: kw, $options: "i" } },
+            { description: { $regex: kw, $options: "i" } },
         ];
     }
     if (query.dueDate) {
@@ -472,6 +472,25 @@ export const listAllTasksInWorkspaceService = async (
         }
     }
 
+
+    // Tìm kiếm theo từ khóa
+    if (query.keyword?.trim()) {
+        const kw = escapeRegex(query.keyword.trim());
+        filter.$or = [
+            { title: { $regex: kw, $options: "i" } },
+            { description: { $regex: kw, $options: "i" } },
+        ];
+    }
+
+    if (query.dueDate) {
+        const d = new Date(query.dueDate);
+        if (!Number.isNaN(d.getTime())) {
+            const start = new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate(), 0, 0, 0, 0));
+            const end = new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate(), 23, 59, 59, 999));
+            filter.dueDate = { $gte: start, $lte: end };
+        }
+    }
+    
     // 3. Query DB
     const skip = (query.pageNumber - 1) * query.pageSize;
     const limit = query.pageSize;
@@ -538,3 +557,7 @@ export const deleteTaskService = async (userId: string, taskId: string, workspac
 
     return { message: "Task deleted successfully" };
 };
+function parseFilter(filterValue: string) {
+    return filterValue.split(",").map((v) => v.trim()).filter(Boolean);
+}
+
