@@ -66,7 +66,7 @@ passport.serializeUser((user: any, done) => {
 
 passport.deserializeUser(async (userId: string, done) => {
     try {
-        const user = await UserModel.findById(userId);
+        const user = await UserModel.findById(userId).populate('currentWorkspace');
         if (!user) {
             return done(null, false);
         }

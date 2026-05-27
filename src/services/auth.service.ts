@@ -67,6 +67,14 @@ export const loginOrCreateAccountService = async (data: {
             if (!user) {
                 throw new NotFoundException("User linked to account not found");
             }
+            // Ensure existing users have a currentWorkspace assigned
+            if (!user.currentWorkspace) {
+                const workspace = await WorkspaceModel.findOne({ owner: user._id }).session(session);
+                if (workspace) {
+                    user.currentWorkspace = workspace._id as mongoose.Types.ObjectId;
+                    await user.save({ session });
+                }
+            }
         } else {
             // Step 2: No account found. If provider didn't return an email, we cannot
             // look up or create a user because email is required by the User model.
